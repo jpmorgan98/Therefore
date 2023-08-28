@@ -16,7 +16,7 @@ auth: J Piper Morgan (morgjack@oregonstate.edu)*/
 //#include <cuda.h>
 
 /* compile notes and prerecs
-
+For LAPACK (not dense)
     In UBUNTU 
         you need these libraries:
             sudo apt-get install libblas-dev checkinstall
@@ -33,6 +33,7 @@ auth: J Piper Morgan (morgjack@oregonstate.edu)*/
         Should be able to compile with: 
             g++-13 main.cpp -std=c++20 -llapack
             
+For Trilinos (see Tril.md for insturcations)
 */
 using namespace std;
 
