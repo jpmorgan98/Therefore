@@ -23,7 +23,7 @@ void cuSolver( std::vector<double> &hA, std::vector<double> &hB) {
     typedef double T;
     // Select appropriate functions for chosen precisions
     auto cusolver_gesv_buffersize = cusolverDnDHgesv_bufferSize;
-    auto cusolver_gesv = cusolverDnDHgesv;
+    auto cusolver_gesv = cusolverDnDDgesv;
 
     cusolver_int_t lda;
     cusolver_int_t ldb;
@@ -40,15 +40,19 @@ void cuSolver( std::vector<double> &hA, std::vector<double> &hB) {
     CUSOLVER_CHECK(cusolverDnCreate(&handle));
     CUSOLVER_CHECK(cusolverDnSetStream(handle, stream));
 
+    cout << "n:" << N << endl;
     // matrix on device
     T *dA;
     cusolver_int_t ldda = ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);
+    cout << "ldda (should be n):  " << ldda << endl;
     // right hand side on device
     T *dB;
     cusolver_int_t lddb = ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);
+    cout << "lddb (should be n):  " << lddb << endl;
     // solution on device
     T *dX;
     cusolver_int_t lddx = ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);
+    cout << "lddx (should be n):  " << lddx << endl;
 
     // pivot sequence on device
     cusolver_int_t *dipiv;
@@ -84,8 +88,35 @@ void cuSolver( std::vector<double> &hA, std::vector<double> &hB) {
     std::cout << "Solving matrix on device..." << std::endl;
     CUDA_CHECK(cudaEventRecord(event_start, stream));
 
-    cusolverStatus_t gesv_status = cusolver_gesv(handle, N, nrhs, dA, ldda, dipiv, dB, lddb, dX,
-                                                 lddx, dwork, dwork_size, &iter, dinfo);
+    /*
+    cusolverDnDDgesv_bufferSize(
+    cusolverHandle_t                handle,
+    int                             n,
+    int                             nrhs,
+    double                      *   dA,
+    int                             ldda,
+    int                         *   dipiv,
+    double                      *   dB,
+    int                             lddb,
+    double                      *   dX,
+    int                             lddx,
+    void                        *   dwork,
+    size_t                      *   lwork_bytes);
+
+    rhs = 1; // one column in b
+                lda = ps.N_mat;
+                ldb = ps.N_mat; // leading b dimention for row major
+                ldb_col = ps.N_mat; // leading b dim for col major
+                i_piv.resize(ps.N_mat, 0);  // pivot column vector
+            }
+
+            // solve Ax=b
+            //info = LAPACKE_dgesv( LAPACK_ROW_MAJOR, N_mat, nrhs, &A_copy[0], lda, &i_piv[0], &b[0], ldb );
+            dgesv_( &ps.N_mat, &nrhs, &A_copy[0], &lda, &i_piv[0], &b[0], &ldb_col, &info );
+    */
+
+    // Actual solve command
+    cusolverStatus_t gesv_status = cusolver_gesv(handle, N, nrhs, dA, ldda, dipiv, dB, lddb, dX, lddx, dwork, dwork_size, &iter, dinfo);
     CUSOLVER_CHECK(gesv_status);
 
     CUDA_CHECK(cudaEventRecord(event_end, stream));
