@@ -59,7 +59,7 @@ include(cusolver_example.cmake)
 
 # Iterative refinement solver is added in CUDA 10.2
 if(NOT CMAKE_CUDA_COMPILER_VERSION VERSION_LESS "10.2")
-    add_cusolver_example(cusolver_examples "cuda solver" cuda_solver.cu)
+    add_cusolver_example(cusolver_examples "cusolver_axb" cusolver_axb.cu)
     #if (CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0")
     #    add_cusolver_example(cusolver_examples "cusolver_irs_expert" cusolver_irs_expert_cuda-11.cu)
     #else()
