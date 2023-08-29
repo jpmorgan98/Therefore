@@ -3,24 +3,21 @@
 #include <cuda_runtime.h>
 #include <cusolverDn.h>
 
-using namespace std
+#include "cusolver_utils.h"
 
+using namespace std;
 
-
-int cuSolver( std::vector<double> &dA, std::vector<double> &hB) {
+void cuSolver( std::vector<double> &hA, std::vector<double> &hB) {
     /*Adapted from:  https://github.com/NVIDIA/CUDALibrarySamples/blob/master/cuSOLVER/gesv/cusolver_irs_expert_cuda-11.cu*/
     
-    int SIZE_wholeproblem = pow(A.size, 0.5);
-    int nrhs = 1;
-
-
-    bool verbose = false;
-
     // Matrix size
-    const int N = 1024;
+    int N = hB.size();
+    
+    // Allocate soultion vector
+    //std::vector<double> hX (N);
 
-    // Numer of right hand sides
-    const int nrhs = 1;
+    // number of right hand sides
+    int nrhs = 1;
 
     // Use double precision matrix and half precision factorization
     typedef double T;
@@ -63,7 +60,7 @@ int cuSolver( std::vector<double> &dA, std::vector<double> &hB) {
     size_t dwork_size;
     // number of refinement iterations returned by solver
     cusolver_int_t iter;
-
+    
     std::cout << "Allocating memory on device..." << std::endl;
     // allocate data
     CUDA_CHECK(cudaMalloc(&dA, ldda * N * sizeof(T)));
@@ -100,12 +97,8 @@ int cuSolver( std::vector<double> &dA, std::vector<double> &hB) {
 
     std::cout << "Solve info is: " << info << ", iter is: " << iter << std::endl;
 
-    CUDA_CHECK(cudaMemcpy2D(hX, ldx * sizeof(T), dX, lddx * sizeof(T), N * sizeof(T), nrhs,
-                            cudaMemcpyDefault));
-    if (verbose) {
-        std::cout << "X:\n";
-        print_matrix(nrhs, N, hX, ldx);
-    }
+    // push data back into hB vector like how normal LAPACK does
+    CUDA_CHECK(cudaMemcpy2D(&hB[0], ldx * sizeof(T), dX, lddx * sizeof(T), N * sizeof(T), nrhs, cudaMemcpyDefault));
 
     CUDA_CHECK(cudaGetLastError());
 
@@ -120,10 +113,6 @@ int cuSolver( std::vector<double> &dA, std::vector<double> &hB) {
     CUDA_CHECK(cudaFree(dB));
     CUDA_CHECK(cudaFree(dA));
 
-    free(hA);
-    free(hB);
-    free(hX);
-
     CUSOLVER_CHECK(cusolverDnDestroy(handle));
     CUDA_CHECK(cudaEventDestroy(event_start));
     CUDA_CHECK(cudaEventDestroy(event_end));
@@ -131,19 +120,20 @@ int cuSolver( std::vector<double> &dA, std::vector<double> &hB) {
 
     std::cout << "Done!" << std::endl;
 
-    return 0;
-
-
-
 }
 
-__global__ void square_vector(vector<double> &A_copy, vector<double> &b, ){
+int main () {
 
-    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<int>();
+    std::vector<double> A = {1, 3 , 2.1, 5, 6.5, 5.5, 8.4, 1.2, 5.9};
+    std::vector<double> b = {4.2, 3.2, 2.3};
 
-    cudaError_t error = cudaMallocArray( &cuArray, &channelDesc, size,1);
+    cuSolver(A, b);
 
-    cudaError_t error1= cudaMemcpyToArray(cuArray, 0, 0, (void*)&A_copy[0], size, cudaMemcpyHostToDevice);
+    cout<<b[0]<<endl;
+    cout<<b[1]<<endl;
+    cout<<b[2]<<endl;
+
+    return( 1 );
 }
 
 /*
