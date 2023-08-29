@@ -70,8 +70,8 @@ void cuSolver( std::vector<double> &hA, std::vector<double> &hB) {
     CUDA_CHECK(cudaMalloc(&dinfo, sizeof(cusolver_int_t)));
 
     // copy input data
-    CUDA_CHECK(cudaMemcpy2D(dA, ldda * sizeof(T), &hA[0], lda * sizeof(T), N * sizeof(T), N, cudaMemcpyDefault));
-    CUDA_CHECK(cudaMemcpy2D(dB, lddb * sizeof(T), &hB[0], ldb * sizeof(T), N * sizeof(T), nrhs, cudaMemcpyDefault));
+    CUDA_CHECK(cudaMemcpy(dA, &hA[0], N * N * sizeof(T), cudaMemcpyDefault));
+    CUDA_CHECK(cudaMemcpy(dB, &hB[0], N * sizeof(T),     cudaMemcpyDefault));
 
     //cudaMemcpy	(	void * 	dst, const void * 	src, size_t 	count, enum cudaMemcpyKind 	kind	 )	
 
@@ -98,7 +98,7 @@ void cuSolver( std::vector<double> &hA, std::vector<double> &hB) {
     std::cout << "Solve info is: " << info << ", iter is: " << iter << std::endl;
 
     // push data back into hB vector like how normal LAPACK does
-    CUDA_CHECK(cudaMemcpy2D(&hB[0], ldx * sizeof(T), dX, lddx * sizeof(T), N * sizeof(T), nrhs, cudaMemcpyDefault));
+    CUDA_CHECK(cudaMemcpy(&hB[0], dX, N * sizeof(T), cudaMemcpyDefault));
 
     CUDA_CHECK(cudaGetLastError());
 
