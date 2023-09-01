@@ -1,6 +1,6 @@
 /*brief: assembly functions for matrices to compute therefore commands
 date: May 23rd 2023
-auth: J Piper Morgan (morgjack@oregonstate.edu)*/
+auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 
 #include <iostream>
 #include <vector>
@@ -8,6 +8,7 @@ auth: J Piper Morgan (morgjack@oregonstate.edu)*/
 #include "util.h"
 #include "mms.h"
 #include "builders.h"
+//#include "cusolver_axb.cu"
 
 //#include "H5Cpp.h"
 //#include "lapacke.h"
@@ -34,6 +35,19 @@ For LAPACK (not dense)
             g++-13 main.cpp -std=c++20 -llapack
             
 For Trilinos (see Tril.md for insturcations)
+
+For CUDA GPU
+    On LASSEN
+        modules
+            CUDA Toolkit 12.0
+            cmake/20
+
+        Uncomment CUDA lines
+        to build
+            mkdir build
+            cd build
+            cmake ..
+            make
 */
 using namespace std;
 
@@ -41,14 +55,14 @@ void eosPrint(ts_solutions state);
 
 // row major to start -> column major for lapack computation
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
-//extern "C" void LAPACKE_dgesv_( LAPACK_ROW_MAJOR, int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
-std::vector<double> row2colSq(std::vector<double> row);
+
 
 // i space, m is angle, k is time, g is energy group
 
 const bool print_mats = false;
 const bool debug_print = false;
 const bool cycle_print = true;
+const bool gpu = false;
 
 
 class run{
@@ -171,11 +185,13 @@ class run{
             }
         }
 
-
+        void cudaDense_linear_solver(vector<double> &A_copy, vector<double> &b){
+            //cuSolver(A_copy, b);
+        }
 
         void linear_solver(vector<double> &A_copy, vector<double> &b){
             if (itter == 0){
-                // lapack variables!
+                // lapack variables (col major)!
                 nrhs = 1; // one column in b
                 lda = ps.N_mat;
                 ldb = ps.N_mat; // leading b dimention for row major
@@ -478,24 +494,3 @@ int main(void){
     
     return(0);
 } // end of main
-
-
-std::vector<double> row2colSq(std::vector<double> row){
-    /*brief */
-    
-    int SIZE = sqrt(row.size());
-
-    std::vector<double> col(SIZE*SIZE);
-
-    for (int i = 0; i < SIZE; ++i){
-        for (int j = 0; j < SIZE; ++j){
-            outofbounds_check(i * SIZE + j, col);
-            outofbounds_check(j * SIZE + i, row);
-
-
-            col[ i * SIZE + j ] = row[ j * SIZE + i ];
-        }
-    }
-
-    return(col);
-}

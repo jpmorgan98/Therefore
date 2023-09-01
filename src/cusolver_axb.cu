@@ -7,7 +7,7 @@
 
 using namespace std;
 
-void cuSolver( std::vector<double> &hA, std::vector<double> &hB) {
+void cuSolver( std::vector<double> &hA, std::vector<double> &hB ) {
     /*Adapted from:  https://github.com/NVIDIA/CUDALibrarySamples/blob/master/cuSOLVER/gesv/cusolver_irs_expert_cuda-11.cu*/
     
     // Matrix size
@@ -40,19 +40,15 @@ void cuSolver( std::vector<double> &hA, std::vector<double> &hB) {
     CUSOLVER_CHECK(cusolverDnCreate(&handle));
     CUSOLVER_CHECK(cusolverDnSetStream(handle, stream));
 
-    cout << "n:" << N << endl;
     // matrix on device
     T *dA;
-    cusolver_int_t ldda = ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);
-    cout << "ldda (should be n):  " << ldda << endl;
+    cusolver_int_t ldda = N;//ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);;
     // right hand side on device
     T *dB;
-    cusolver_int_t lddb = ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);
-    cout << "lddb (should be n):  " << lddb << endl;
+    cusolver_int_t lddb = N;//ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);
     // solution on device
     T *dX;
-    cusolver_int_t lddx = ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);
-    cout << "lddx (should be n):  " << lddx << endl;
+    cusolver_int_t lddx = N;//ALIGN_TO(N * sizeof(T), device_alignment) / sizeof(T);
 
     // pivot sequence on device
     cusolver_int_t *dipiv;
@@ -160,9 +156,15 @@ int main () {
 
     cuSolver(A, b);
 
+    cout << "Computed soultion:" << endl;
     cout<<b[0]<<endl;
     cout<<b[1]<<endl;
     cout<<b[2]<<endl;
+    cout << "" << endl;
+    cout << "Exact soultion:" << endl;
+    cout<<"-3.71152895"<<endl;
+    cout<<"2.28223652"<<endl;
+    cout<<"-0.41662543"<<endl;
 
     return( 1 );
 }

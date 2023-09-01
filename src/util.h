@@ -170,3 +170,23 @@ inline void outofbounds_check(int index, std::vector<double> &vec){
         cout<<"sometihng was indexed over a vectors max size"<<endl;
     }
 }
+
+std::vector<double> row2colSq(std::vector<double> row){
+    /*brief */
+    
+    int SIZE = sqrt(row.size());
+
+    std::vector<double> col(SIZE*SIZE);
+
+    for (int i = 0; i < SIZE; ++i){
+        for (int j = 0; j < SIZE; ++j){
+            outofbounds_check(i * SIZE + j, col);
+            outofbounds_check(j * SIZE + i, row);
+
+
+            col[ i * SIZE + j ] = row[ j * SIZE + i ];
+        }
+    }
+
+    return(col);
+}
