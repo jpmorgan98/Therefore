@@ -31,12 +31,10 @@ mfp = np.linspace(0, 20, 25)
 dt = np.linspace(0.01,0.4,100)
 
 x = ratio
-y = dt
+y = mfp
 
 xs = x.size
 ys = y.size
-
-
 
 epsilon = 1e-16
 
@@ -55,14 +53,14 @@ for i in range(xs):
         
         print('Percent done: %2d' %(((i*ys+k)/total_runs)*100),end='\r')
         
-        xsec_hat = xsec + 1/(v*dt[k])
-        #xsec = mfp[k]/dx
+        #xsec_hat = xsec + 1/(v*dt[k])
+        xsec = mfp[k]/dx
         scattering_xsec = xsec*ratio[i]
         
         N_mesh = int(L/dx)
 
         dx_mesh = dx*np.ones(N_mesh, data_type)
-        xsec_mesh = xsec_hat*np.ones(N_mesh, data_type)
+        xsec_mesh = xsec*np.ones(N_mesh, data_type)
         xsec_scatter_mesh = scattering_xsec*np.ones(N_mesh, data_type)
         source_mesh = source*np.ones(N_mesh, data_type)
 
@@ -116,13 +114,27 @@ print()
 
 [Xx, Yy] = np.meshgrid(y,x)
 
+N_si = np.zeros([xs,ys])
+N_oci = np.zeros([xs,ys])
+
+for i in range(xs):
+    for k in range(ys):
+        N_si[i,k] = np.log(epsilon)/np.log(spec_rad_si[i,k])
+        N_oci[i,k] = np.log(epsilon)/np.log(spec_rad_oci[i,k])
+
+N_ratio = N_si/N_oci
+
+spec_rad_ratio = spec_rad_si/spec_rad_oci
+
+np.savez('spec_rad', spec_rad_si=spec_rad_si, spec_rad_oci=spec_rad_oci, mfp=mfp, ratio=ratio, spec_rad_ratio=spec_rad_ratio, N_ratio=N_ratio)
+
 
 
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 surf = ax.plot_surface(Xx,Yy,spec_rad_oci, cmap='viridis')
 plt.title('OCI SCB Spectral Radius Plot')
 plt.xlabel(r'mfp [$\sigma * \Delta x$]')
-plt.ylabel('Scattering Ratio [$σ_s$/σ]')
+plt.ylabel('Scattering Ratio [$Σ_s$/Σ]')
 ax.set_zlabel('Spectrial Radius [ρ]')
 plt.savefig('specrad_oci',dpi=600)
 
@@ -131,7 +143,7 @@ fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 surf = ax.plot_surface(Xx,Yy,spec_rad_si, cmap='viridis')
 plt.title('SI SCB Spectral Radius Plot')
 plt.xlabel(r'mfp [$\sigma * \Delta x$]')
-plt.ylabel('Scattering Ratio [$σ_s$/σ]')
+plt.ylabel('Scattering Ratio [$Σ_s$/Σ]')
 ax.set_zlabel('Spectrial Radius [ρ]')
 plt.savefig('specrad_si',dpi=600)
 
@@ -143,7 +155,7 @@ surf = ax.plot_surface(Xx,Yy,spec_rad_si)
 surf = ax.plot_surface(Xx,Yy,spec_rad_oci)
 plt.title('SI SCB Spectral Radius Plot')
 plt.xlabel(r'$\Delta t$')
-plt.ylabel('Scattering Ratio [$σ_s$/σ]')
+plt.ylabel('Scattering Ratio [$Σ_s$/Σ]')
 ax.set_zlabel('Spectrial Radius [ρ]')
 plt.savefig('specrad_both',dpi=600)
 
@@ -151,21 +163,10 @@ plt.savefig('specrad_both',dpi=600)
 #plt.show()
 
 
-
-N_si = np.zeros([xs,ys])
-N_oci = np.zeros([xs,ys])
-
-for i in range(xs):
-    for k in range(ys):
-        N_si[i,k] = np.log(epsilon)/np.log(spec_rad_si[i,k])
-        N_oci[i,k] = np.log(epsilon)/np.log(spec_rad_oci[i,k])
-
-N_ratio = N_si/N_oci
-
 #print(N_ratio)
 
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-surf = ax.plot_surface(Xx,Yy,N_ratio, cmap='coolwarm')
+surf = ax.plot_surface(Xx,Yy,spec_rad_ratio, cmap='coolwarm')
 plt.title('Ratio')
 plt.xlabel(r'$\Delta t$')
 plt.ylabel(r'Scattering Ratio [$\sigma_s/\sigma$]')

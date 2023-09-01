@@ -120,7 +120,8 @@ double relativeError(double a, double b, double max){
 std::vector<double> relativeError_ebe ( std::vector<double> v1, std::vector<double> v2){
     using namespace std;
     /*breif: computing the relative error between two vectors element by element
-            using inf norm https://www.netlib.org/lapack/lug/node75.html*/
+            using inf norm https://www.netlib.org/lapack/lug/node75.html
+            */
 
     if (v1.size() != v2.size()){
         std::cout << "WARNING: vectors are not of same size --relativeError_ebe" << std::endl;
@@ -128,7 +129,7 @@ std::vector<double> relativeError_ebe ( std::vector<double> v1, std::vector<doub
 
     // find the maximum element between all vectors
     vector<double> max_vec = {*max_element(v2.begin(), v2.end()), *max_element(v1.begin(), v1.end())};
-    double max = *max_element( max_vec.begin(), max_vec.end() ) ;
+    double max = *max_element( max_vec.begin(), max_vec.end() );
 
     // allocate an error vector
     vector<double> error(v1.size());
@@ -140,6 +141,7 @@ std::vector<double> relativeError_ebe ( std::vector<double> v1, std::vector<doub
 
     return(error);
 }
+
 
 
 
@@ -158,8 +160,32 @@ double infNorm_error ( std::vector<double> v1, std::vector<double> v2 ){
 }
 
 
+double L2Norm ( std::vector<double> v1, std::vector<double> v2 ){
+    
+    using namespace std;
+
+    int N = v1.size();
+
+    double error1;
+    double error2;
+
+    for (int i=0; i<N; ++i){
+        error1 += pow( v1[i]-v2[i], 2 );
+        error2 += pow( v1[i], 2 );
+    }
+
+    error1 = pow(error1, 0.5);
+    error2 = pow(error2, 0.5);
+
+    return( error1/error2 ); 
+
+}
+
+
+
 
 inline void outofbounds_check(int index, std::vector<double> &vec){
+    /*brief: debug checking to make sure things are not being indexed over or under a vectors size*/
     using namespace std;
 
     if ( index < 0 ) {

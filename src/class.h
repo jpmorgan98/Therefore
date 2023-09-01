@@ -40,6 +40,7 @@ class problem_space{
         double velocity;
 
         bool mms;
+        double ds;
 
         std::vector<double> weights;
         std::vector<double> angles;

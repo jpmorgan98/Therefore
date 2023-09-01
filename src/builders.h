@@ -49,6 +49,7 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
                 // negative angle
                 if (ps.angles[j] < 0){
                     if (i == ps.N_cells-1){ // right boundary condition
+                        
                         af_rb = ps.boundary_condition(1,g,j);
                         af_hn_rb = ps.boundary_condition(1,g,j);
                     } else { // pulling information from right to left
@@ -64,11 +65,12 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
                         //cout << af_hn_rb << endl;
 
                     }
-                    b_small = b_neg(cells[i], g, ps.angles[j], af_hl_l, af_hl_r, af_rb, af_hn_rb);
+                    b_small = b_neg(cells[i], g, ps.angles[j], j, af_hl_l, af_hl_r, af_rb, af_hn_rb);
 
                 // positive angles
                 } else {
                     if (i == 0){ // left boundary condition
+                        
                         af_lb    = ps.boundary_condition(0,g,j);
                         af_hn_lb = ps.boundary_condition(0,g,j);
 
@@ -80,9 +82,10 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
 
                         af_lb    = aflux_last[index_start_n1+1];
                         af_hn_lb = aflux_last[index_start_n1+3];
+
                     }
 
-                    b_small = b_pos(cells[i], g, ps.angles[j], af_hl_l, af_hl_r, af_lb, af_hn_lb);
+                    b_small = b_pos(cells[i], g, ps.angles[j], j, af_hl_l, af_hl_r, af_lb, af_hn_lb);
                 }
 
                 outofbounds_check(index_start,   b);
@@ -166,8 +169,10 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
 
         // down scattering!!!!
         bool ds_flag = false;
+        
         if (g==1){
-            double xsec_ds = 0;
+            
+            double xsec_ds = ps.ds;
             //down scattering look the same just with an off axis terms
             DS = scatter(cells[i].dx, xsec_ds, ps.weights, ps.N_angles);
             bool ds_flag = true;

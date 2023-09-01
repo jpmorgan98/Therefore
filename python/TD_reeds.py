@@ -15,12 +15,12 @@ from timeit import default_timer as timer
 
 #from tabulate import tabulate
 dt = 0.1
-max_time = 3
+max_time = 0.5
 N_time = int(max_time/dt)
 
 v = 4
 
-N_angle = 10
+N_angle = 64
 
 
 def flatLinePlot(x, y, pl):
@@ -75,6 +75,8 @@ for i in range(N_mesh):
     x[2*i] = sum(dx_mesh[:i])
     x[2*i+1] = sum(dx_mesh[:i+1])
 
+np.savez('x.npz', x=x)
+
 #x[-1] = 8.00001
 L = 8.0
     
@@ -110,14 +112,22 @@ for i in range(N_angle):
 
 # >>>>> problem running
 
-
+'''
 start = timer()
 print('OCI MB SCB Single big gpu')
-[sfMBSparse, current, spec_rads] = therefore.multiBalance(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'Big') 
+[sfMBSparse, current, spec_rads, loops] = therefore.multiBalance(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'Big') 
 end = timer()
 print(end - start)
 
 
+start = timer()
+print('SI MB SCB Single big gpu')
+[sfMBSiBig, current, spec_rads, loops] = therefore.multiBalance(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'SI_MB_GPU') 
+end = timer()
+print(end - start)
+'''
+
+'''
 start = timer()
 print('SI BE SCB')
 [sfEulerSI, current, spec_rads, loops] = therefore.euler(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'SI')
@@ -134,28 +144,24 @@ print(end - start)
 [sfSS, current2, spec_rad2, source_converged, loops] = therefore.OCI(sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh)
 
 #launch some problems
-start = timer()
-print('SI MB SCB Single big gpu')
-[sfMBSiBig, current, spec_rads] = therefore.multiBalance(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'SI_MB_GPU') 
-end = timer()
-print(end - start)
-
+'''
 
 
 start = timer()
 print('SI MB SCB')
-[sfMBSi, current, spec_rads] = therefore.multiBalance(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'SI_MB')
+[sfMBSi, current, spec_rads, loops] = therefore.multiBalance(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'SI_MB')
 end = timer()
 print(end - start)
 
 
 start = timer()
 print('OCI MB SCB CPU')
-[sfMB_trad, current, spec_rads] = therefore.multiBalance(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'OCI_MB')
+[sfMB_trad, current, spec_rads, loops] = therefore.multiBalance(inital_angular_flux, sim_perams, dx_mesh, xsec_mesh, xsec_scatter_mesh, source_mesh, 'OCI_MB')
 end = timer()
 print(end - start)
 
 
+'''
 np.savez('TD_Reeds.npz', sfMBSparse=sfMBSparse, sfEulerSI=sfEulerSI,  sfEulerOCI=sfEulerOCI, sfSS=sfSS, sfMBSiBig=sfMBSiBig, sfMBSi=sfMBSi, sfMB_trad=sfMB_trad)
 
 
@@ -195,3 +201,4 @@ simulation = animation.FuncAnimation(fig, animate, frames=N_time)
 writervideo = animation.PillowWriter(fps=250)
 simulation.save('td_reeds.gif') #saveit!
 
+'''
