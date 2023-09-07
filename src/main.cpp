@@ -6,7 +6,7 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 #include <vector>
 
 #include "util.h"
-#include "mms.h"
+//#include "mms.h"
 #include "builders.h"
 //#include "cusolver_axb.cu"
 
@@ -272,10 +272,10 @@ class run{
                 
             }
 
-        cout << "mms solutions published " << endl;
-
-
+        cout << "time integrated mms solutions published " << endl;
         }
+
+    
 
 
 
@@ -295,10 +295,11 @@ class run{
 
             // time step loop
             for(int t=0; t<ps.N_time; ++t){ //
+                ps.time_val = t;
                 time += ps.dt;
                 init_af_timestep();
 
-                if ( ps.mms ){
+                if ( ps.mms_bool ){
                     sourceSource( );
                 }
 
@@ -382,7 +383,7 @@ int main(void){
     vector<double> v = {4, 1};
     vector<double> xsec_total = {1, 0.5};
     vector<double> xsec_scatter = {.2, .1};
-    double ds = 0.05;
+    double ds = 0.0;
     vector<double> Q = {0, 0};
 
     double Length = 1;
@@ -414,6 +415,7 @@ int main(void){
 
     // problem space class construction
     problem_space ps;
+    ps.L = Length;
     ps.dt = dt;
     ps.dx = dx;
     ps.ds = ds;
@@ -515,7 +517,7 @@ int main(void){
 
     }
 
-    ps.mms = true;
+    ps.mms_bool = true;
 
     // ===================
 
@@ -550,6 +552,8 @@ int main(void){
     problem.manSource.sigmaS1 = xsec_scatter[0];
     problem.manSource.sigmaS2 = xsec_scatter[1];
     problem.manSource.sigmaS1_2 = ps.ds;
+
+    ps.manSource = problem.manSource;
 
     
     problem.run_timestep();

@@ -1,4 +1,6 @@
+#include "mms.h"
 using namespace std;
+
 
 class cell{
     public:
@@ -32,14 +34,17 @@ class problem_space{
         int N_groups;
         int N_mat; 
         int N_rm;
+        int time_val;
         double Length;
         double dt;
         double dx;
         double t_max;
         double material_source;
         double velocity;
+        double L;
 
-        bool mms;
+        bool mms_bool;
+        mms manSource; // source for the method of manufactured solution
         double ds;
 
         std::vector<double> weights;
@@ -72,13 +77,12 @@ class problem_space{
                 hence reflecting
             */
 
-            int helper_index;
 
             if (side == 0){
 
                 outofbounds_check(group*N_angles + angle, af_left_bound);
 
-                return(af_left_bound[group*N_angles + helper_index]);
+                return(af_left_bound[group*N_angles]);
 
             } else if (side == 1) {
 
@@ -96,6 +100,23 @@ class problem_space{
             return(0.5);
         }
 
+
+
+        double mms_boundary(int side, int group, int angle){
+            
+            if (side==0){
+                return(af_left_bound[group*N_angles + angle]);
+            } else if (side==1) {
+                return(af_left_bound[group*N_angles]);
+            } else {
+                bound_warn();
+                return(0.0);
+            }
+        }
+
+
+
+
         double boundary_condition(int side, int group, int angle){
             /*breif: computes boundary conditions for a specific group and angle
             side 0 for left, 1 for right*/
@@ -104,6 +125,8 @@ class problem_space{
                 return(0.0);
             } else if (boundary_conditions[side] == 1){ //reflecting
                 return( reflectingBC(side, group, angle) ); // manual alteration for reeds, change back
+            } else if (boundary_conditions[side] == 3){ //mms
+                return ( mms_boundary(side, group, angle) );
             } else {
                 bound_warn();
                 return(0.0);
@@ -124,17 +147,45 @@ class problem_space{
         int index_left;
         int index_right;
 
-        for (int g=0; g<N_groups; g++){
+        if (mms_bool){
+            std::vector<double> temp;
+
             for (int j=0; j<N_angles; j++){
 
-                index_left  = g*(SIZE_groupBlocks) + 4*j + 2;
-                index_right = ((N_cells-1)*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j) + 3;
+                temp = manSource.group1af(0, dx, dt*time_val, dt, angles[j]);
 
-                outofbounds_check(index_right, aflux_last);
-                outofbounds_check(index_left, aflux_last);
+                af_left_bound[0*N_groups + j  ] = temp[1];
+                af_left_bound[0*N_groups + j+1] = temp[3];
+                
+                temp = manSource.group1af(L, dx, dt*time_val, dt, angles[j]);
 
-                af_left_bound[g*N_groups + j] = aflux_last[index_left];
-                af_right_bound[g*N_groups +j] = aflux_last[index_right];
+                af_right_bound[0*N_groups + j  ] = temp[0];
+                af_right_bound[0*N_groups + j+1] = temp[2];
+                
+                temp = manSource.group2af(0, dx, dt*time_val, dt, angles[j]);
+
+                af_left_bound[1*N_groups + j  ] = temp[1];
+                af_left_bound[1*N_groups + j+1] = temp[3];
+
+                temp = manSource.group2af(L, dx, dt*time_val, dt, angles[j]);
+
+                af_right_bound[1*N_groups + j  ] = temp[0];
+                af_right_bound[1*N_groups + j+1] = temp[2];
+            }
+
+        } else {
+            for (int g=0; g<N_groups; g++){
+                for (int j=0; j<N_angles; j++){
+
+                    index_left  = g*(SIZE_groupBlocks) + 4*j + 2;
+                    index_right = ((N_cells-1)*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j) + 3;
+
+                    outofbounds_check(index_right, aflux_last);
+                    outofbounds_check(index_left, aflux_last);
+
+                    af_left_bound[g*N_groups + j] = aflux_last[index_left];
+                    af_right_bound[g*N_groups +j] = aflux_last[index_right];
+                }
             }
         }
     }
@@ -155,6 +206,8 @@ class boundary_condition{
         int cell_id;
         int type;
         double magnitude;
+        double dt;
+        double dx;
 };
 
 

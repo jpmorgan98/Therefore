@@ -2,6 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mms import mms
 
+def group2cont(x, mu, t):
+    return(pow(x,2)*t + mu)
+
+def group1cont(x,mu,t):
+    return(x + t + mu)
 
 def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
@@ -11,7 +16,7 @@ N_cells = 10
 N_groups = 2
 N_time = 2
 
-
+dt = 1.0
 
 file_name_base = 'afluxUnsorted'
 file_name_base2 = 'mms_sol'
@@ -29,6 +34,7 @@ SIZE_groupBlocks = N_angles*4
 SIZE_angleBlocks = 4
 
 x = np.genfromtxt('x.csv', dtype=np.float64, delimiter=',', skip_header=1)
+x = x[:,0]
 dx = x[1]
 
 af_wp = np.zeros((N_time*2, N_groups, N_angles, 2*N_cells))
@@ -37,6 +43,9 @@ assert (int(af_wp.size/N_time) == SIZE_problem)
 
 af_mms = np.zeros((N_time*2, N_groups, N_angles, 2*N_cells))
 sf_mms = np.zeros((N_time*2, N_groups, 2*N_cells))
+
+af_mms_cont = np.zeros((N_time*2, N_groups, N_angles, 2*N_cells))
+sf_mms_cont = np.zeros((N_time*2, N_groups, 2*N_cells))
 
 # schuky-duck the angular flux together
 for t in range(N_time):
@@ -47,7 +56,7 @@ for t in range(N_time):
 
     # import mms data
     file2 = file_name_base2+str(t)+file_ext
-    mms_raw = np.genfromtxt(file, dtype=np.float64, delimiter=',', skip_header=2)
+    mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
     mms_raw = mms_raw[:,0]
 
     if (af_raw.size != SIZE_problem):
@@ -82,12 +91,45 @@ for t in range(N_time):
                 sf_mms[t*2+1,g,2*i]   += weights[n] * mms_raw[index_start+2]
                 sf_mms[t*2+1,g,2*i+1] += weights[n] * mms_raw[index_start+3]
 
-print(error(sf_wp[2,0,:], sf_mms[2,1,:]))
+                mms_cont_raw = np.zeros(4)
+                if (g==0):
+                    mms_cont_raw[0] = group1cont(x[i*2], angles[n], t*dt  )
+                    mms_cont_raw[1] = group1cont(x[i*2+1], angles[n], dt*1)
+                    mms_cont_raw[2] = group1cont(x[i*2], angles[n], t*dt+.5*dt)
+                    mms_cont_raw[3] = group1cont(x[i*2+1], angles[n], t*dt+.5*dt)
+                elif (g==1):
+                    mms_cont_raw[0] = group2cont(x[i*2], angles[n], t*dt  )
+                    mms_cont_raw[1] = group2cont(x[i*2+1], angles[n], dt*1)
+                    mms_cont_raw[2] = group2cont(x[i*2], angles[n], t*dt+.5*dt)
+                    mms_cont_raw[3] = group2cont(x[i*2+1], angles[n], t*dt+.5*dt)
+                #print(mms_cont_raw)
+
+                af_mms_cont[t*2  ,g,n,2*i]   = mms_cont_raw[0]
+                af_mms_cont[t*2  ,g,n,2*i+1] = mms_cont_raw[1]
+                af_mms_cont[t*2+1,g,n,2*i]   = mms_cont_raw[2]
+                af_mms_cont[t*2+1,g,n,2*i+1] = mms_cont_raw[3]
+
+                sf_mms_cont[t*2  ,g,2*i]   += weights[n] * mms_cont_raw[0]
+                sf_mms_cont[t*2  ,g,2*i+1] += weights[n] * mms_cont_raw[1]
+                sf_mms_cont[t*2+1,g,2*i]   += weights[n] * mms_cont_raw[2]
+                sf_mms_cont[t*2+1,g,2*i+1] += weights[n] * mms_cont_raw[3]
+
+print(error(sf_wp[2,0,:], sf_mms[2,0,:]))
+
+print(sf_mms_cont[0,0,:])
+
+temp = np.zeros(2*N_cells)
+for i in range(N_cells*2):
+    for n in range(N_angles):
+        temp[i] += weights[n] * group1cont(x[i], angles[n], 0)
+
+print(temp == sf_mms_cont[0,0,:])
 
 #print(sf_mms)
 plt.figure()
-plt.plot(x[:,0], sf_wp[2,1,:], label='computed')
-plt.plot(x[:,0], sf_mms[2,1,:], '*', label='mms')
+plt.plot(x, sf_wp[0,0,:], label='computed')
+plt.plot(x, sf_mms[0,0,:], '*', label='mms')
+plt.plot(x, temp, '+', label='cont')
 #plt.plot(x[:,0], sf_wp[2,1,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[5,0,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[5,1,:], label='g1 -- no source')
