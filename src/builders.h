@@ -54,8 +54,8 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
                 if (ps.angles[j] < 0){
                     if (i == ps.N_cells-1){ // right boundary condition
                         
-                        af_rb = ps.boundary_condition(1,g,j);
-                        af_hn_rb = ps.boundary_condition(1,g,j);
+                        af_rb = ps.boundary_condition(1,g,j,0);
+                        af_hn_rb = ps.boundary_condition(1,g,j,1);
                     } else { // pulling information from right to left
                         index_start_p1 = index_start + ps.SIZE_cellBlocks;
 
@@ -76,8 +76,8 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
                 } else {
                     if (i == 0){ // left boundary condition
                         
-                        af_lb    = ps.boundary_condition(0,g,j);
-                        af_hn_lb = ps.boundary_condition(0,g,j);
+                        af_lb    = ps.boundary_condition(0,g,j,0);
+                        af_hn_lb = ps.boundary_condition(0,g,j,1);
 
                     } else { // pulling information from left to right
                         index_start_n1 = index_start - ps.SIZE_cellBlocks;

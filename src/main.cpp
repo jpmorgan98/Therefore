@@ -319,9 +319,9 @@ class run{
                     // lapack requires a copy of data that it uses for row piviot (A after _dgesv != A)
                     A_copy = A_col;
                     ps.assign_boundary(aflux_last);
+                    //print_vec_sd(ps.af_right_bound);
 
                     b_gen(b, aflux_previous, aflux_last, cells, ps);
-                    
                     
                     // reminder: last refers to iteration, previous refers to time step
 
@@ -390,7 +390,7 @@ int main(void){
     double IC_homo = 0;
     
     int N_cells = 10; //10
-    int N_angles = 6; 
+    int N_angles = 2; 
     int N_time = 5;
     int N_groups = 2;
 
