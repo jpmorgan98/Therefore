@@ -190,10 +190,12 @@ inline void outofbounds_check(int index, std::vector<double> &vec){
 
     if ( index < 0 ) {
         cout<<">>>>>>>>>>>>ERROR<<<<<<<<<<<<"<<endl;
-        cout<<"sometihng was indexed under 0"<<endl;
+        cout<<"something was indexed under 0"<<endl;
+        cout<<"index: " << index <<" size of vec: "<<vec.size()<<endl;
     } else if ( index >= vec.size() ) {
         cout<<">>>>>>>>>>>>>>>>>>>>ERROR<<<<<<<<<<<<<<<<<<<<"<<endl;
-        cout<<"sometihng was indexed over a vectors max size"<<endl;
+        cout<<"something was indexed over a vectors max size"<<endl;
+        cout<<"index: " << index <<" size of vec: "<<vec.size()<<endl;
     }
 }
 

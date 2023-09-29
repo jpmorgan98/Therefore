@@ -24,6 +24,10 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
     int index_start_p1;
 
     for (int i=0; i<ps.N_cells; i++){
+
+        if (i == 0){
+        } else if (i==ps.N_cells-1){
+        }
         
         for (int g=0; g<ps.N_groups; g++){
 
@@ -65,6 +69,7 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
                         //cout << af_hn_rb << endl;
 
                     }
+                    //cell &cell, int group, double mu, int angle, double af_hl_L, double af_hl_R, double af_R, double af_hn_R
                     b_small = b_neg(cells[i], g, ps.angles[j], j, af_hl_l, af_hl_r, af_rb, af_hn_rb);
 
                 // positive angles
@@ -84,7 +89,6 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
                         af_hn_lb = aflux_last[index_start_n1+3];
 
                     }
-
                     b_small = b_pos(cells[i], g, ps.angles[j], j, af_hl_l, af_hl_r, af_lb, af_hn_lb);
                 }
 

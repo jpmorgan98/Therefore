@@ -288,7 +288,6 @@ class run{
 
             // generation of the whole ass mat
             A_gen(A, cells, ps);
-            std::cout << "here" << std::endl;
             vector<double> A_col = row2colSq(A);
 
             vector<double> b(ps.N_mat);
@@ -322,6 +321,7 @@ class run{
                     ps.assign_boundary(aflux_last);
 
                     b_gen(b, aflux_previous, aflux_last, cells, ps);
+                    
                     
                     // reminder: last refers to iteration, previous refers to time step
 
@@ -430,7 +430,7 @@ int main(void){
     ps.initialize_from_previous = false;
     ps.max_iteration = int(100);
     // 0 for vac 1 for reflecting 2 for mms
-    ps.boundary_conditions = {0,0};
+    ps.boundary_conditions = {3,3};
     // size of the cell blocks in all groups and angle
     ps.SIZE_cellBlocks = ps.N_angles*ps.N_groups*4;
     // size of the group blocks in all angle within a cell
@@ -512,6 +512,7 @@ int main(void){
         vector<double> temp (N_angles*N_groups*4);
         cellCon.Q = temp;
         cellCon.region_id = 1;
+        cellCon.N_angle = ps.N_angles;
 
         cells.push_back(cellCon);
 

@@ -139,6 +139,6 @@ plt.xlabel('Distance')
 plt.ylabel('Sc Fl')
 plt.title('Single region -- trouble shoot time step=1')
 plt.legend()
-plt.show()
+plt.savefig('soultion.png')
 
 
