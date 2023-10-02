@@ -16,7 +16,7 @@ Integration tests and runs of interest with plots:
 # Acknowledgements
 This work was supported by the Center for Exascale Monte-Carlo Neutron Transport (CEMeNT) a PSAAP-III project funded by the Department of Energy, grant number: DE-NA003967.
 
-Everyone on the CeMENT Team but specifically: Jackson Morgan, Aaron Reynolds, Todd Palmer, Kyle Niemeyer, Ilham Variansyah, and Kayla Clements
+Everyone on the CeMENT Team but specifically: Joanna Piper Morgan, Aaron Reynolds, Todd Palmer, Kyle Niemeyer, Ilham Variansyah, and Kayla Clements
 
 ## Odds and Ends
 This project started off of work done in NSE653: Advanced Particle Transport Program class at Ore. St. Unv.
