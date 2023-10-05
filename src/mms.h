@@ -43,10 +43,10 @@ class mms{
             double afc = ( afa + (group1afUNINT(mu,x_i,t_m) - group1afUNINT(mu,x_m,t_m)) ) / 2;
             double afd = ( afb +  (group1afUNINT(mu,x_p,t_m) - group1afUNINT(mu,x_i,t_m)) ) / 2;
 
-            afa = abs(afa);
-            afb = abs(afb);
-            afc = abs(afc);
-            afd = abs(afd);
+            //afa = abs(afa);
+            //afb = abs(afb);
+            //afc = abs(afc);
+            //afd = abs(afd);
 
             return( std::vector<double> {afa, afb, afc, afd} );
         }
@@ -109,10 +109,10 @@ class mms{
             double afc = ( afa + (group2afUNINT(mu,x_i,t_m) - group2afUNINT(mu,x_m,t_m)) ) / 2;
             double afd = ( afb +  (group2afUNINT(mu,x_p,t_m) - group2afUNINT(mu,x_i,t_m)) ) / 2;
 
-            afa = abs(afa);
-            afb = abs(afb);
-            afc = abs(afc);
-            afd = abs(afd);
+            //afa = abs(afa);
+            //afb = abs(afb);
+            //afc = abs(afc);
+            //afd = abs(afd);
 
             return( std::vector<double> {afa, afb, afc, afd} );
         }

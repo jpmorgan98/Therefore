@@ -127,12 +127,16 @@ for i in range(N_cells*2):
 
 #print(sf_mms)
 plt.figure()
-plt.plot(x, af_wp[0,1, 0,:], 'k', label='computed')
-plt.plot(x, af_mms[0,1, 0,:], 'k*', label='mms')
-plt.plot(x, af_wp[0,1, 1,:], 'r', label='computed')
-plt.plot(x, af_mms[0,1, 1,:], 'r*', label='mms')
-plt.plot(x, sf_wp[0,1,:], 'g', label='computed')
-plt.plot(x, sf_mms[0,1,:], 'g*', label='mms')
+plt.plot(x, af_wp [2,1, 0,:], 'k', label='computed')
+#plt.plot(x, af_mms[0,0, 0,:], 'k*', label='mms')
+plt.plot(x, af_wp [2,1, 1,:], 'r', label='computed')
+#plt.plot(x, af_mms[0,0, 1,:], 'r*', label='mms')
+plt.plot(x, sf_wp [2,1,:], 'g', label='computed')
+#plt.plot(x, sf_mms[0,0,:], 'g*', label='mms')
+#plt.plot(x, af_mms[0,1, 1,:], 'r*', label='mms')
+#plt.plot(x, sf_wp[0,1,:], 'g', label='computed')
+
+
 #plt.plot(x, temp, '+', label='cont')
 #plt.plot(x[:,0], sf_wp[2,1,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[5,0,:], label='g1 -- no source')

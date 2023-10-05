@@ -179,7 +179,7 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
             double xsec_ds = ps.ds;
             //down scattering look the same just with an off axis terms
             DS = scatter(cells[i].dx, xsec_ds, ps.weights, ps.N_angles);
-            bool ds_flag = true;
+            ds_flag = true;
         }
 
         int index_start = 4*g*ps.N_angles * 4*ps.N_angles*ps.N_groups + 4*g*ps.N_angles;

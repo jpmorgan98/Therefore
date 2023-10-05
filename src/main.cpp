@@ -384,7 +384,7 @@ int main(void){
     vector<double> xsec_total = {1, 0.5};
     vector<double> xsec_scatter = {.2, .1};
     double ds = 0.0;
-    vector<double> Q = {0, 0};
+    vector<double> Q = {1, 1};
 
     double Length = 1;
     double IC_homo = 0;
@@ -429,8 +429,8 @@ int main(void){
     ps.weights = weights;
     ps.initialize_from_previous = false;
     ps.max_iteration = int(100);
-    // 0 for vac 1 for reflecting 2 for mms
-    ps.boundary_conditions = {3,3};
+    // 0 for vac 1 for reflecting 3 for mms
+    ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle
     ps.SIZE_cellBlocks = ps.N_angles*ps.N_groups*4;
     // size of the group blocks in all angle within a cell
@@ -518,7 +518,7 @@ int main(void){
 
     }
 
-    ps.mms_bool = true;
+    ps.mms_bool = false;
 
     // ===================
 
@@ -540,21 +540,21 @@ int main(void){
     problem.ps = ps;
     problem.cells = cells;
     problem.IC = IC;
-    // mms coefficients
-    problem.manSource.A = 1.0;
-    problem.manSource.B = 1.0;
-    problem.manSource.C = 1.0;
-    problem.manSource.D = 1.0;
-    problem.manSource.F = 1.0;
-    problem.manSource.v1 = v[0];
-    problem.manSource.v2 = v[1];
-    problem.manSource.sigma1 = xsec_total[0];
-    problem.manSource.sigma2 = xsec_total[1];
-    problem.manSource.sigmaS1 = xsec_scatter[0];
-    problem.manSource.sigmaS2 = xsec_scatter[1];
-    problem.manSource.sigmaS1_2 = ps.ds;
-
-    ps.manSource = problem.manSource;
+    //// mms coefficients
+    //problem.manSource.A = 1.0;
+    //problem.manSource.B = 1.0;
+    //problem.manSource.C = 1.0;
+    //problem.manSource.D = 1.0;
+    //problem.manSource.F = 1.0;
+    //problem.manSource.v1 = v[0];
+    //problem.manSource.v2 = v[1];
+    //problem.manSource.sigma1 = xsec_total[0];
+    //problem.manSource.sigma2 = xsec_total[1];
+    //problem.manSource.sigmaS1 = xsec_scatter[0];
+    //problem.manSource.sigmaS2 = xsec_scatter[1];
+    //problem.manSource.sigmaS1_2 = ps.ds;
+//
+    //ps.manSource = problem.manSource;
 
     
     problem.run_timestep();
