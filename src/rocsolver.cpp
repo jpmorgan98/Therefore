@@ -7,7 +7,7 @@
 
 // compile
 // module load rocm
-// hipcc hipSolver.cpp -I/opt/rocm/include -L/opt/rocm/lib -lhipsolver
+// hipcc rocsolver.cpp -I/opt/rocm/include -lrocsolver -lrocblas
 
 void amdGPU_dgesv( std::vector<double> &hA, std::vector<double> &hb ) {
     //https://rocsolver.readthedocs.io/en/latest/api/lapack.html#_CPPv415rocsolver_dgesv14rocblas_handleK11rocblas_intK11rocblas_intPdK11rocblas_intP11rocblas_intPdK11rocblas_intP11rocblas_int
