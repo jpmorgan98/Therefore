@@ -11,7 +11,7 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 //#include "cusolver_axb.cu"
 
 //#include "H5Cpp.h"
-//#include "lapacke.h"
+#include "lapack.h"
 //#include <Eigen/Dense>
 //#include <cusparse_v2.h>
 //#include <cuda.h>
@@ -48,13 +48,23 @@ For CUDA GPU
             cd build
             cmake ..
             make
+
+For AMD GPU
+    on Lockhart (AMD MI200 devlopment machine)
+        module load rocm
+        hipcc hipSolver.cpp -I/opt/rocm/include -L/opt/rocm/lib -lrocsolver -lrocblas
+    Generally on a system with 
+        /opt/rocm/bin/hipcc -I/opt/rocm/include -c example.cpp /opt/rocm/bin/hipcc -o example -L/opt/rocm/lib -lrocsolver -lrocblas example.o
+
 */
+
+
 using namespace std;
 
 void eosPrint(ts_solutions state);
 
 // row major to start -> column major for lapack computation
-extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
+//extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
 
 // i space, m is angle, k is time, g is energy group
