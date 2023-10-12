@@ -218,3 +218,40 @@ std::vector<double> row2colSq(std::vector<double> row){
 
     return(col);
 }
+
+
+void check_close(std::vector<double> v1, std::vector<double> v2){
+    using namespace std;
+
+    int n1 = v1.size();
+    int n2 = v2.size();
+
+    double rtol=1e-05;
+    double atol=1e-08;
+
+    if (n1 != n2){
+        cout<< "check_close: vectors are not of same size" <<endl;
+        cout << "n1 " << n1 << "    n2 " << n2 << endl;
+    }
+
+    double r1;
+    double r2;
+
+    bool checker = true;
+    for (int i=0; i<n1; ++i){
+
+        r1 = abs(v1[i] - v2[i]);
+        r2 = atol + rtol * abs(v2[i]);
+
+        if ( r1 >= r2 ){
+            checker = false;
+        }
+    }
+
+    if ( checker == false ){
+        cout << "ERROR: Two vectors that should be equal arent" << endl;
+    }
+
+
+
+}

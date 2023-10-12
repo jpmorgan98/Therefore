@@ -12,6 +12,7 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 
 //#include "H5Cpp.h"
 #include "lapack.h"
+#include "rocsolver.cpp"
 //#include <Eigen/Dense>
 //#include <cusparse_v2.h>
 //#include <cuda.h>
@@ -52,6 +53,7 @@ For CUDA GPU
 For AMD GPU
     on Lockhart (AMD MI200 devlopment machine)
         module load rocm
+        cc main.cpp -I/opt/rocm/include -lrocsolver -lrocblas -D__HIP_PLATFORM_AMD__
         hipcc hipSolver.cpp -I/opt/rocm/include -L/opt/rocm/lib -lrocsolver -lrocblas
     Generally on a system with 
         /opt/rocm/bin/hipcc -I/opt/rocm/include -c example.cpp /opt/rocm/bin/hipcc -o example -L/opt/rocm/lib -lrocsolver -lrocblas example.o
@@ -197,8 +199,8 @@ class run{
             }
         }
 
-        void cudaDense_linear_solver(vector<double> &A_copy, vector<double> &b){
-            //cuSolver(A_copy, b);
+        void rocDense_linearSolver(vector<double> &A_copy, vector<double> &b){
+            amdGPU_dgesv(A_copy, b);
         }
 
         void linear_solver(vector<double> &A_copy, vector<double> &b){
@@ -206,14 +208,15 @@ class run{
                 // lapack variables (col major)!
                 nrhs = 1; // one column in b
                 lda = ps.N_mat;
-                ldb = ps.N_mat; // leading b dimention for row major
+                ldb = 1; // leading b dimention for row major
                 ldb_col = ps.N_mat; // leading b dim for col major
                 i_piv.resize(ps.N_mat, 0);  // pivot column vector
             }
 
             // solve Ax=b
             //info = LAPACKE_dgesv( LAPACK_ROW_MAJOR, N_mat, nrhs, &A_copy[0], lda, &i_piv[0], &b[0], ldb );
-            dgesv_( &ps.N_mat, &nrhs, &A_copy[0], &lda, &i_piv[0], &b[0], &ldb_col, &info );
+            int Ndgsev = ps.N_mat;
+            dgesv_( &Ndgsev, &nrhs, &A_copy[0], &lda, &i_piv[0], &b[0], &ldb_col, &info );
 
             if( info > 0 ) {
                 printf( "\n>>>ERROR<<<\n" );
@@ -322,27 +325,34 @@ class run{
                 error_n2 = 1;       // error back two iterations
                 converged = true;   // converged boolean
 
-                vector<double> A_copy(ps.N_mat);
+                vector<double> A_copy(ps.N_rm);
+                vector<double> A_copy_2(ps.N_rm);
+                vector<double> b_copy(ps.N_mat);
                 
                 while (converged){
 
                     // lapack requires a copy of data that it uses for row piviot (A after _dgesv != A)
                     A_copy = A_col;
+                    A_copy_2 = A_col;
                     ps.assign_boundary(aflux_last);
                     //print_vec_sd(ps.af_right_bound);
 
                     b_gen(b, aflux_previous, aflux_last, cells, ps);
+                    b_copy = b;
                     
                     // reminder: last refers to iteration, previous refers to time step
 
                     //Lapack solver 
-                    linear_solver(A_copy, b);
+                    linear_solver(A_copy_2, b_copy);
+
+                    rocDense_linearSolver(A_copy, b);
+
+                    check_close(b, b_copy);
                     
                     // compute the L2 norm between the last and current iteration
                     error = L2Norm( aflux_last, b );
 
                     // compute spectral radius
-                    // np.linalg.norm(scalar_flux_next - scalar_flux, ord=2) / np.linalg.norm((scalar_flux - scalar_flux_last), ord=2)
                     spec_rad = pow( pow(error+error_n1,2), .5) / pow(pow(error_n1+error_n2, 2), 0.5);
                     checkSpecRad( );
 
@@ -390,9 +400,9 @@ int main(void){
     // eventually from an input deck
     double dx = .1;
     double dt = 1.0;
-    vector<double> v = {4, 1};
-    vector<double> xsec_total = {1, 0.5};
-    vector<double> xsec_scatter = {.2, .1};
+    vector<double> v = {1, 4};
+    vector<double> xsec_total = {1, 3.0};
+    vector<double> xsec_scatter = {.2, .6};
     double ds = 0.0;
     vector<double> Q = {1, 1};
 
@@ -519,7 +529,8 @@ int main(void){
         cellCon.dx = dx;
         cellCon.v = v;
         cellCon.dt = dt;
-        vector<double> temp (N_angles*N_groups*4);
+        vector<double> temp (N_angles*N_groups*4, 1.0);
+        for (int p=0; p<temp.size(); ++p){temp[i] *= Q[0];}
         cellCon.Q = temp;
         cellCon.region_id = 1;
         cellCon.N_angle = ps.N_angles;

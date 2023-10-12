@@ -32,8 +32,8 @@ class problem_space{
         int N_angles; 
         int N_time;
         int N_groups;
-        int N_mat; 
-        int N_rm;
+        int N_mat;  //order of the system (number of linear equations)
+        int N_rm; //size of the whole ass mat
         int time_val;
         double Length;
         double dt;

@@ -1,7 +1,7 @@
 #include <cmath>
 #include <vector>
 
-# define e 2.7182818
+# define expVal 2.7182818
 
 class mms{
     public:
