@@ -59,6 +59,7 @@ class problem_space{
         int max_iteration;
 
         int SIZE_cellBlocks;
+        int ELEM_cellBlocks;
         int SIZE_groupBlocks;
         int SIZE_angleBlocks;
 
