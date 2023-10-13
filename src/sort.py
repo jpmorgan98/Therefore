@@ -12,7 +12,7 @@ def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
 N_angles = 2
-N_cells = 10
+N_cells = 100
 N_groups = 2
 N_time = 2
 

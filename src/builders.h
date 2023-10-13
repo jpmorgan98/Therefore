@@ -114,11 +114,12 @@ void A_gen_sparse(std::vector<double> &A, std::vector<cell> cells, problem_space
         A_c_gen(i, A_c_rm, cells, ps);
         std::vector<double> A_c_cm = row2colSq(A_c_rm);
 
-        int A_id_start = i*ps.SIZE_cellBlocks;
+        int index_start = i*ps.ELEM_cellBlocks;
 
-        for (int r=0; r<ps.SIZE_cellBlocks; r++){
-            A[A_id_start+r] = A_c_cm[r];
+        for (int r=0; r<ps.ELEM_cellBlocks; ++r){
+            A[index_start+r] = A_c_cm[r];
         }
+
     }
 }
 

@@ -11,8 +11,8 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 //#include "cusolver_axb.cu"
 
 //#include "H5Cpp.h"
-#include "lapack.h"
-#include "rocsolver.cpp"
+//#include "lapack.h"
+//#include "rocsolver.cpp"
 //#include <Eigen/Dense>
 //#include <cusparse_v2.h>
 //#include <cuda.h>
@@ -66,7 +66,7 @@ using namespace std;
 void eosPrint(ts_solutions state);
 
 // row major to start -> column major for lapack computation
-//extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
+extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
 
 // i space, m is angle, k is time, g is energy group
@@ -200,18 +200,16 @@ class run{
         }
 
         void rocDense_linearSolver(vector<double> &A_copy, vector<double> &b){
-            amdGPU_dgesv(A_copy, b);
+        //    amdGPU_dgesv(A_copy, b);
         }
 
         void linear_solver(vector<double> &A_copy, vector<double> &b){
-            if (itter == 0){
-                // lapack variables (col major)!
-                nrhs = 1; // one column in b
-                lda = ps.N_mat;
-                ldb = 1; // leading b dimention for row major
-                ldb_col = ps.N_mat; // leading b dim for col major
-                i_piv.resize(ps.N_mat, 0);  // pivot column vector
-            }
+            // lapack variables (col major)!
+            nrhs = 1; // one column in b
+            lda = ps.N_mat;
+            ldb = 1; // leading b dimention for row major
+            ldb_col = ps.N_mat; // leading b dim for col major
+            i_piv.resize(ps.N_mat, 0);  // pivot column vector
 
             // solve Ax=b
             //info = LAPACKE_dgesv( LAPACK_ROW_MAJOR, N_mat, nrhs, &A_copy[0], lda, &i_piv[0], &b[0], ldb );
@@ -228,20 +226,23 @@ class run{
         }
 
         void PBJlinear_solver(vector<double> &A_sp_cm, vector<double> &b){
-            // lapack variables (col major)!
-            nrhs = 1; // one column in b
-            lda = ps.SIZE_cellBlocks;
-            ldb_col = ps.SIZE_cellBlocks; // leading b dim for col major
-            i_piv.resize(ps.SIZE_cellBlocks, 0);  // pivot column vector
-
 
             // solve Ax=b
             //info = LAPACKE_dgesv( LAPACK_ROW_MAJOR, N_mat, nrhs, &A_copy[0], lda, &i_piv[0], &b[0], ldb );
+            #pragma omp parallel for
             for (int i=0; i<ps.N_cells; ++i){
+                // lapack variables (col major!)
+                nrhs = 1; // one column in b
+                lda = ps.SIZE_cellBlocks;
+                ldb_col = ps.SIZE_cellBlocks; // leading b dim for col major
+                std::vector<int> ipiv_par(ps.SIZE_cellBlocks);
                 int Ndgsev = ps.SIZE_cellBlocks;
-                std::cout<<i<<std::endl;
-                dgesv_( &Ndgsev, &nrhs, &A_sp_cm[i*ps.ELEM_cellBlocks], &lda, &i_piv[0], &b[i*ps.SIZE_cellBlocks], &ldb_col, &info );
+                //std::cout<<i<<std::endl;
+
+                //print_cm_sp(A_sp_cm, i*ps.ELEM_cellBlocks, ps.SIZE_cellBlocks);
+                dgesv_( &Ndgsev, &nrhs, &A_sp_cm[i*ps.ELEM_cellBlocks], &lda, &ipiv_par[0], &b[i*ps.SIZE_cellBlocks], &ldb_col, &info );
             }
+            
             
 
             if( info > 0 ) {
@@ -319,15 +320,14 @@ class run{
             init_vectors();
 
             // allocation of the whole ass mat
-            vector<double> A(ps.N_rm);
+            //vector<double> A(ps.N_rm);
 
             // generation of the whole ass mat
-            A_gen(A, cells, ps);
-            vector<double> A_col = row2colSq(A);
+            //A_gen(A, cells, ps);
+            //vector<double> A_col = row2colSq(A);
 
-            vector<double> A_sp(ps.SIZE_cellBlocks*ps.N_cells);
+            vector<double> A_sp(ps.ELEM_cellBlocks*ps.N_cells);
             A_gen_sparse(A_sp, cells, ps);
-            std::cout<<"generated A"<<std::endl;
 
             vector<double> b(ps.N_mat);
 
@@ -351,41 +351,39 @@ class run{
                 error_n2 = 1;       // error back two iterations
                 converged = true;   // converged boolean
 
-                vector<double> A_copy(ps.N_rm);
-                vector<double> A_copy_2(ps.N_rm);
+                //vector<double> A_copy(ps.N_rm);
+                //vector<double> A_copy_2(ps.N_rm);
                 vector<double> A_sp_copy(ps.ELEM_cellBlocks*ps.N_cells);
-                vector<double> b_copy(ps.N_mat);
-                vector<double> b_copy2(ps.N_mat);
+                //vector<double> b_copy(ps.N_mat);
+                //vector<double> b_copy2(ps.N_mat);
                 
                 while (converged){
 
                     // lapack requires a copy of data that it uses for row piviot (A after _dgesv != A)
-                    A_copy = A_col;
-                    A_copy_2 = A_col;
+                    //A_copy = A_col;
+                    //A_copy_2 = A_col;
                     A_sp_copy = A_sp;
                     ps.assign_boundary(aflux_last);
                     //print_vec_sd(ps.af_right_bound);
 
                     b_gen(b, aflux_previous, aflux_last, cells, ps);
-                    b_copy = b;
-                    b_copy2 = b;
+                    //b_copy = b;
+                    //b_copy2 = b;
                     
                     // reminder: last refers to iteration, previous refers to time step
 
                     //Lapack solvers
-                    std::cout<<"into linear solvers gpu dense linalg"<<std::endl;
-                    linear_solver(A_copy_2, b_copy);
+                    //std::cout<<"into linear solvers gpu dense linalg"<<std::endl;
+                    //linear_solver(A_copy, b);
+                    //std::cout<<"into cpu linear solvers PBJ"<<std::endl;
+                    PBJlinear_solver(A_sp_copy, b);
 
-                    PBJlinear_solver(A_sp_copy, b_copy2);
-
-                    rocDense_linearSolver(A_copy, b);
+                    //rocDense_linearSolver(A_copy, b_copy);
 
                     //rocSparse_solver(A_bsr, b);
 
-                    std::cout<<"checking gpu dense linalg"<<std::endl;
-                    check_close(b, b_copy);
-                    std::cout<<"checking cpu sparse linalg"<<std::endl;
-                    check_close(b, b_copy2);
+                    //check_close(b, b_copy);
+                    //check_close(b, b_copy2);
                     
                     // compute the L2 norm between the last and current iteration
                     error = L2Norm( aflux_last, b );
@@ -448,7 +446,7 @@ int main(void){
     double IC_homo = 0;
     
     int N_cells = 10; //10
-    int N_angles = 2; 
+    int N_angles = 4; 
     int N_time = 5;
     int N_groups = 2;
 
@@ -486,7 +484,7 @@ int main(void){
     ps.angles = angles;
     ps.weights = weights;
     ps.initialize_from_previous = false;
-    ps.max_iteration = int(100);
+    ps.max_iteration = int(1e4);
     // 0 for vac 1 for reflecting 3 for mms
     ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle

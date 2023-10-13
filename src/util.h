@@ -49,6 +49,19 @@ void print_cm(std::vector<double> vec){
 }
 
 
+void print_cm_sp(std::vector<double> vec, int offset, int N){
+    using namespace std;
+
+    cout << "Matrix is of size ["<<N<<","<<N<<"]"<<endl;
+
+    for (int i=offset; i<offset + N; i++){
+        for (int j=0; j<N; j++){
+            printf("%5.2f ", vec[j*N+i]);
+        }
+        printf("\n");
+    }
+}
+
 
 void print_vec(int N, double *vec){
     using namespace std;
