@@ -192,7 +192,7 @@ class problem_space{
     }
 
     void bound_warn(){
-        if (warn_flag = 0){
+        if (warn_flag == 0){
             std::cout << ">>>>WARNING<<<<<" << endl;
             std::cout << "check boundary condition config" << endl;
             std::cout << "assuming vac" << endl;

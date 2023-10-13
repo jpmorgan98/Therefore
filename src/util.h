@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <fstream>
-#include<algorithm>
+#include <algorithm>
 
 /*brief: generic utility functions*/
 

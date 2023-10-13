@@ -11,8 +11,8 @@ def group1cont(x,mu,t):
 def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
-N_angles = 2
-N_cells = 100
+N_angles = 40
+N_cells = 10
 N_groups = 2
 N_time = 2
 
@@ -81,6 +81,7 @@ for t in range(N_time):
                 sf_wp[t*2+1,g,2*i]   += weights[n] * af_raw[index_start+2]
                 sf_wp[t*2+1,g,2*i+1] += weights[n] * af_raw[index_start+3]
 
+                '''
                 af_mms[t*2  ,g,n,2*i]   = mms_raw[index_start]
                 af_mms[t*2  ,g,n,2*i+1] = mms_raw[index_start+1]
                 af_mms[t*2+1,g,n,2*i]   = mms_raw[index_start+2]
@@ -114,8 +115,9 @@ for t in range(N_time):
                 sf_mms_cont[t*2+1,g,2*i]   += weights[n] * mms_cont_raw[2]
                 sf_mms_cont[t*2+1,g,2*i+1] += weights[n] * mms_cont_raw[3]
 
-print(error(sf_wp[2,0,:], sf_mms[2,0,:]))
 
+print(error(sf_wp[2,0,:], sf_mms[2,0,:]))
+'''
 #print(sf_mms_cont[0,0,:])
 
 temp = np.zeros(2*N_cells)

@@ -12,7 +12,7 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 
 //#include "H5Cpp.h"
 //#include "lapack.h"
-//#include "rocsolver.cpp"
+#include "rocsolver.cpp"
 //#include <Eigen/Dense>
 //#include <cusparse_v2.h>
 //#include <cuda.h>
@@ -199,12 +199,20 @@ class run{
             }
         }
 
+
+
         void rocDense_linearSolver(vector<double> &A_copy, vector<double> &b){
-        //    amdGPU_dgesv(A_copy, b);
+            //amdGPU_dgesv(A_copy, b);
         }
 
+
+
         void linear_solver(vector<double> &A_copy, vector<double> &b){
-            // lapack variables (col major)!
+            /* DO NOT CALL DEBUGING ONLY
+            Solves a single large dense matrix, in this case zeros and all
+            */
+
+            // lapack variables for the whole a problem (col major)!
             nrhs = 1; // one column in b
             lda = ps.N_mat;
             ldb = 1; // leading b dimention for row major
@@ -212,47 +220,52 @@ class run{
             i_piv.resize(ps.N_mat, 0);  // pivot column vector
 
             // solve Ax=b
-            //info = LAPACKE_dgesv( LAPACK_ROW_MAJOR, N_mat, nrhs, &A_copy[0], lda, &i_piv[0], &b[0], ldb );
             int Ndgsev = ps.N_mat;
             dgesv_( &Ndgsev, &nrhs, &A_copy[0], &lda, &i_piv[0], &b[0], &ldb_col, &info );
 
             if( info > 0 ) {
-                printf( "\n>>>ERROR<<<\n" );
+                printf( "\n>>>WHOLE A ERROR<<<\n" );
                 printf( "The diagonal element of the triangular factor of A,\n" );
                 printf( "U(%i,%i) is zero, so that A is singular;\n", info, info );
                 printf( "the solution could not be computed.\n" );
                 exit( 1 );
             }
         }
+
+
 
         void PBJlinear_solver(vector<double> &A_sp_cm, vector<double> &b){
+            /*breif: Solves individual dense cell matrices in parrallel on cpu
+            requires -fopenmp to copmile.
 
-            // solve Ax=b
-            //info = LAPACKE_dgesv( LAPACK_ROW_MAJOR, N_mat, nrhs, &A_copy[0], lda, &i_piv[0], &b[0], ldb );
+            A and b store all matrices in col major in a single std:vector as
+            offsets from one another*/
+
+            // parallelized over the number of cells
             #pragma omp parallel for
             for (int i=0; i<ps.N_cells; ++i){
-                // lapack variables (col major!)
-                nrhs = 1; // one column in b
-                lda = ps.SIZE_cellBlocks;
-                ldb_col = ps.SIZE_cellBlocks; // leading b dim for col major
-                std::vector<int> ipiv_par(ps.SIZE_cellBlocks);
-                int Ndgsev = ps.SIZE_cellBlocks;
-                //std::cout<<i<<std::endl;
 
-                //print_cm_sp(A_sp_cm, i*ps.ELEM_cellBlocks, ps.SIZE_cellBlocks);
-                dgesv_( &Ndgsev, &nrhs, &A_sp_cm[i*ps.ELEM_cellBlocks], &lda, &ipiv_par[0], &b[i*ps.SIZE_cellBlocks], &ldb_col, &info );
+                // lapack variables for a single cell (col major!)
+                nrhs = 1; // one column in b
+                lda = ps.SIZE_cellBlocks; // leading A dim for col major
+                ldb_col = ps.SIZE_cellBlocks; // leading b dim for col major
+                std::vector<int> ipiv_par(ps.SIZE_cellBlocks); // pivot vector
+                int Npbj = ps.SIZE_cellBlocks; // size of problem
+
+                // solve Ax=b in a cell
+                dgesv_( &Npbj, &nrhs, &A_sp_cm[i*ps.ELEM_cellBlocks], &lda, &ipiv_par[0], &b[i*ps.SIZE_cellBlocks], &ldb_col, &info );
             }
             
             
-
             if( info > 0 ) {
-                printf( "\n>>>ERROR<<<\n" );
+                printf( "\n>>>PBJ LINALG ERROR<<<\n" );
                 printf( "The diagonal element of the triangular factor of A,\n" );
                 printf( "U(%i,%i) is zero, so that A is singular;\n", info, info );
                 printf( "the solution could not be computed.\n" );
                 exit( 1 );
             }
         }
+
 
 
         void checkSpecRad (){
@@ -266,6 +279,7 @@ class run{
                 }
             }
         }
+
 
 
         void publish_mms (){
@@ -341,33 +355,32 @@ class run{
                     sourceSource( );
                 }
 
-
                 vector<double> b(ps.N_mat, 0.0);
-                
+
+                //vector<double> A_copy(ps.N_rm);
+                //vector<double> A_copy2(ps.N_rm);
+                vector<double> A_sp_copy(ps.ELEM_cellBlocks*ps.N_cells);
+                vector<double> A_sp_copy2(ps.ELEM_cellBlocks*ps.N_cells);
+                vector<double> b_copy(ps.N_mat);
+
                 // resets
                 itter = 0;          // iteration counter
                 error = 1;          // error from current iteration 
                 error_n1 = 1;       // error back one iteration (from last)
                 error_n2 = 1;       // error back two iterations
                 converged = true;   // converged boolean
-
-                //vector<double> A_copy(ps.N_rm);
-                //vector<double> A_copy_2(ps.N_rm);
-                vector<double> A_sp_copy(ps.ELEM_cellBlocks*ps.N_cells);
-                //vector<double> b_copy(ps.N_mat);
-                //vector<double> b_copy2(ps.N_mat);
                 
                 while (converged){
 
                     // lapack requires a copy of data that it uses for row piviot (A after _dgesv != A)
                     //A_copy = A_col;
-                    //A_copy_2 = A_col;
+                    A_sp_copy2 = A_sp;
                     A_sp_copy = A_sp;
                     ps.assign_boundary(aflux_last);
                     //print_vec_sd(ps.af_right_bound);
 
                     b_gen(b, aflux_previous, aflux_last, cells, ps);
-                    //b_copy = b;
+                    b_copy = b;
                     //b_copy2 = b;
                     
                     // reminder: last refers to iteration, previous refers to time step
@@ -376,13 +389,15 @@ class run{
                     //std::cout<<"into linear solvers gpu dense linalg"<<std::endl;
                     //linear_solver(A_copy, b);
                     //std::cout<<"into cpu linear solvers PBJ"<<std::endl;
+                    //amdGPU_dgesv_batched(A_sp_copy2, b_copy, ps);
+
                     PBJlinear_solver(A_sp_copy, b);
 
                     //rocDense_linearSolver(A_copy, b_copy);
 
                     //rocSparse_solver(A_bsr, b);
 
-                    //check_close(b, b_copy);
+                    check_close(b, b_copy);
                     //check_close(b, b_copy2);
                     
                     // compute the L2 norm between the last and current iteration
@@ -446,7 +461,7 @@ int main(void){
     double IC_homo = 0;
     
     int N_cells = 10; //10
-    int N_angles = 4; 
+    int N_angles = 40; 
     int N_time = 5;
     int N_groups = 2;
 
@@ -617,7 +632,7 @@ int main(void){
     
     problem.run_timestep();
 
-    problem.publish_mms();
+    //problem.publish_mms();
     
     return(0);
 } // end of main

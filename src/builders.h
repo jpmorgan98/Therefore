@@ -107,6 +107,9 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
 }
 
 void A_gen_sparse(std::vector<double> &A, std::vector<cell> cells, problem_space ps){
+    /*breif: only non zero elements of the array are stored in a single array of total size
+    (N_an*N_group*4)**2*N_cells. A cell block soultion is then stored in a column
+    major where the leading value is an offset from */
     
     for (int i=0; i<ps.N_cells; i++){
         
@@ -125,6 +128,9 @@ void A_gen_sparse(std::vector<double> &A, std::vector<cell> cells, problem_space
 
 
 void A_gen(std::vector<double> &A, std::vector<cell> cells, problem_space ps){ 
+    /*FOR DEBUGING ONLY! 
+    Produces whole ass sparse matrix structure for PBJ method zeros and all in
+    a dense formulation. Total size (N_an*N_group*4*N_cells)**2*/
 
     int dimA_c = 4 * ps.N_groups * ps.N_angles;
 
