@@ -386,19 +386,10 @@ class run{
                     // reminder: last refers to iteration, previous refers to time step
 
                     //Lapack solvers
-                    //std::cout<<"into linear solvers gpu dense linalg"<<std::endl;
-                    //linear_solver(A_copy, b);
-                    //std::cout<<"into cpu linear solvers PBJ"<<std::endl;
-                    //amdGPU_dgesv_batched(A_sp_copy2, b_copy, ps);
-
+                    amdGPU_dgesv_strided_batched(A_sp_copy2, b_copy, ps);
                     PBJlinear_solver(A_sp_copy, b);
 
-                    //rocDense_linearSolver(A_copy, b_copy);
-
-                    //rocSparse_solver(A_bsr, b);
-
                     check_close(b, b_copy);
-                    //check_close(b, b_copy2);
                     
                     // compute the L2 norm between the last and current iteration
                     error = L2Norm( aflux_last, b );
@@ -449,7 +440,7 @@ int main(void){
     
     // problem definition
     // eventually from an input deck
-    double dx = .1;
+    double dx = .001;
     double dt = 1.0;
     vector<double> v = {1, 4};
     vector<double> xsec_total = {1, 3.0};
@@ -460,8 +451,8 @@ int main(void){
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 10; //10
-    int N_angles = 40; 
+    int N_cells = 1000; //10
+    int N_angles = 40;
     int N_time = 5;
     int N_groups = 2;
 

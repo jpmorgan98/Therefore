@@ -75,30 +75,32 @@ class problem_space{
             int ELEM_cellBlocks;
     };*/
 
-void amdGPU_dgesv_batched( std::vector<double> &hA, std::vector<double> &hb, problem_space ps) {
+void amdGPU_dgesv_strided_batched( std::vector<double> &hA, std::vector<double> &hb, problem_space ps) {
     
     /*breif:
-    
+        Solves a set of individual matrices striding over a cell.
+        Right now everything is allocated and de-allocated on in every itteration
+        this will be optimized in future implementaitons
     */
     
     // perameters
     rocblas_int N = ps.SIZE_cellBlocks;           // ros and cols in each household problem
     rocblas_int lda = ps.SIZE_cellBlocks;         // leading dimension of A in each household problem
     rocblas_int ldb = ps.SIZE_cellBlocks;         // leading dimension of B in each household problem
-    rocblas_int nrhs = ps.SIZE_cellBlocks;        // number of nrhs in each household problem
-    rocblas_stride strideA = ps.ELEM_cellBlocks;  // stride from start of one matrix to the next
+    rocblas_int nrhs = 1;                         // number of nrhs in each household problem
+    rocblas_stride strideA = ps.ELEM_cellBlocks;  // stride from start of one matrix to the next (household to the next)
     rocblas_stride strideB = ps.SIZE_cellBlocks;  // stride from start of one rhs to the next
     rocblas_stride strideP = ps.SIZE_cellBlocks;  // stride from start of one pivot to the next
-    rocblas_int batch_count = ps.N_cells;         // number of matricies
+    rocblas_int batch_count = ps.N_cells;         // number of matricies (in this case number of cells)
 
     // initialization
-    hipStream_t stream;
-    hipStreamCreate(&stream);
+    //hipStream_t stream;
+    //hipStreamCreate(&stream);
 
     rocblas_handle handle;
     rocblas_create_handle(&handle);
 
-    rocblas_set_stream(handle, stream);
+    //rocblas_set_stream(handle, &stream);
 
     // preload rocBLAS GEMM kernels (optional)
     // rocblas_initialize();
@@ -117,14 +119,14 @@ void amdGPU_dgesv_batched( std::vector<double> &hA, std::vector<double> &hb, pro
     hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
     hipMemcpy(db, &hb[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
 
-    // bathed soultion to Ax=b via dgesv
+    // bathed strided soultion to Ax=b via double-gesv
     // rocsolver_dgesv_strided_batched(rocblas_handle handle, const rocblas_int n, const rocblas_int nrhs, 
     //          double *A, const rocblas_int lda, const rocblas_stride strideA, rocblas_int *ipiv, const rocblas_stride strideP, 
     //          double *B, const rocblas_int ldb, const rocblas_stride strideB, rocblas_int *info, const rocblas_int batch_count)
     
     rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
     
-    //hipDeviceSynchronize();
+    hipDeviceSynchronize();
 
     //std::cout << "A" << std::endl;
     std::vector<int> info(batch_count);
@@ -133,19 +135,13 @@ void amdGPU_dgesv_batched( std::vector<double> &hA, std::vector<double> &hb, pro
     //std::cout << "C" << std::endl;
     for (int k=0; k<info.size(); ++k){
         if (info[k] != 0){
-            std::cout << "ROCSOLVER ERROR: Matrix is singular" << std::endl;
+            std::cout << "ROCSOLVER ERROR: Matrix is singular in batch " << k << std::endl;
             std::cout << info[k] << std::endl;
         }
     }
-    //std::cout << "alpha" << std::endl;
-    
-    //std::cout << "alpha" << std::endl;
-    
-    
 
     // copy the results back to CPU
     hipMemcpy(&hb[0], db, sizeof(double)*strideB*batch_count, hipMemcpyDeviceToHost);
-    //std::cout << "beta" << std::endl;
 
     // clean up
     hipFree(dA);
@@ -157,6 +153,8 @@ void amdGPU_dgesv_batched( std::vector<double> &hA, std::vector<double> &hb, pro
     rocblas_destroy_handle(handle);
     //std::cout << "gamma" << std::endl;
 }
+
+
 
 /*
 

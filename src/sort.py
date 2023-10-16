@@ -11,8 +11,8 @@ def group1cont(x,mu,t):
 def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
-N_angles = 40
-N_cells = 10
+N_angles = 6
+N_cells = 100
 N_groups = 2
 N_time = 2
 
