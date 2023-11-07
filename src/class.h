@@ -201,6 +201,41 @@ class problem_space{
     }
 };
 
+
+
+class problem_space_gpu{
+    public:
+        // physical space
+        int N_cells; 
+        int N_angles; 
+        int N_time;
+        int N_groups;
+        int N_mat;  //order of the system (number of linear equations)
+        int N_rm; //size of the whole ass mat
+        int time_val;
+        double Length;
+        double dt;
+        double dx;
+        double t_max;
+        double material_source;
+        double velocity;
+        double L;
+
+        std::vector<double> weights;
+        std::vector<double> angles;
+
+        std::vector<double> af_last;
+
+        int SIZE_cellBlocks;
+        int ELEM_cellBlocks;
+        int SIZE_groupBlocks;
+        int SIZE_angleBlocks;
+
+        vector<double> af_left_bound;
+        vector<double> af_right_bound;
+};
+
+
 class boundary_condition{
     public:
         char side;

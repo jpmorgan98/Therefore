@@ -99,3 +99,63 @@ std::vector<double> b_neg(cell &cell, int group, double mu, int angle, double af
 
     return(b_neg);
 }
+
+
+
+// gpu functions
+std::vector<double> b_pos_const_win_itteration( cell cell, int group, int angle, double af_hl_L, double af_hl_R ){
+
+    double timer2 = cell.dx/(2*cell.v[group] * cell.dt);
+
+    int helper = 4*angle + group*4*cell.N_angle;
+
+    outofbounds_check(0 + helper, cell.Q);
+    outofbounds_check(1 + helper, cell.Q);
+    outofbounds_check(2 + helper, cell.Q);
+    outofbounds_check(3 + helper, cell.Q);
+
+    // explanation on indicies of Q located in cells class
+    std::vector<double> b_pos = {cell.dx/4*cell.Q[0 + 4*angle + group*4*cell.N_angle] + timer2*af_hl_L,
+                                 cell.dx/4*cell.Q[1 + 4*angle + group*4*cell.N_angle] + timer2*af_hl_R,
+                                 cell.dx/4*cell.Q[2 + 4*angle + group*4*cell.N_angle],
+                                 cell.dx/4*cell.Q[3 + 4*angle + group*4*cell.N_angle]};
+
+    return(b_pos);
+
+}
+
+std::vector<double> b_neg_const_win_itteration( cell &cell, int group, int angle, double af_hl_L, double af_hl_R ){
+
+    double timer2 = cell.dx/(2*cell.v[group] * cell.dt);
+
+    int helper = 4*angle + group*4*cell.N_angle;
+
+    outofbounds_check(0 + helper, cell.Q);
+    outofbounds_check(1 + helper, cell.Q);
+    outofbounds_check(2 + helper, cell.Q);
+    outofbounds_check(3 + helper, cell.Q);
+
+    std::vector<double> b_neg ={cell.dx/4*cell.Q[0 + helper] + timer2*af_hl_L,
+                                cell.dx/4*cell.Q[1 + helper] + timer2*af_hl_R,
+                                cell.dx/4*cell.Q[2 + helper],
+                                cell.dx/4*cell.Q[3 + helper]};
+
+    return(b_neg);
+}
+
+
+
+
+
+void b_pos_var_win_itteration( std::vector<double> &b, double mu, double af_L, double af_hn_L ){
+
+    b[0] += mu*af_L;
+    b[2] += mu*af_hn_L;
+
+}
+
+void b_neg_var_win_itteration( std::vector<double> &b, double mu, double af_R, double af_hn_R ){
+
+    b[1] -= mu*af_R;
+    b[3] -= mu*af_hn_R;
+}

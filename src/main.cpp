@@ -4,18 +4,25 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 
 #include <iostream>
 #include <vector>
+#include "run.cpp"
 
-#include "util.h"
+//#include "util.h"
 //#include "mms.h"
-#include "builders.h"
+//#include "builders.h"
 //#include "cusolver_axb.cu"
 
 //#include "H5Cpp.h"
 //#include "lapack.h"
-#include "rocsolver.cpp"
+//#include "rocsolver.cpp"
 //#include <Eigen/Dense>
 //#include <cusparse_v2.h>
 //#include <cuda.h>
+
+const bool print_mats = false;
+const bool debug_print = false;
+const bool gpu = false;
+
+
 
 /* compile notes and prerecs
 For LAPACK (not dense)
@@ -66,371 +73,10 @@ using namespace std;
 void eosPrint(ts_solutions state);
 
 // row major to start -> column major for lapack computation
-extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
+
 
 
 // i space, m is angle, k is time, g is energy group
-
-const bool print_mats = false;
-const bool debug_print = false;
-const bool cycle_print = true;
-const bool gpu = false;
-
-
-class run{
-
-    public:
-
-        problem_space ps;
-        vector<cell> cells;
-        vector<double> IC;
-
-        vector<double> aflux_last;
-        vector<double> aflux_previous;
-
-
-
-        int cycle_print_flag = 0; // for printing headers
-
-        int itter;          // iteration counter
-        double error;       // error from current iteration
-        double error_n1;    // error back one iteration (from last)
-        double error_n2;    // error back two iterations
-        bool converged;  // converged boolean
-        double spec_rad;
-
-        double time = 0;
-
-        // lapack variables!
-        int nrhs; // one column in b
-        int lda;
-        int ldb; // leading b dimention for row major
-        int ldb_col; // leading b dim for col major
-        std::vector<int> i_piv;  // pivot column vector
-        int info;
-
-        // source for the method of manufactured solution
-        mms manSource;
-
-        void init_vectors(){
-            // vector org angular flux from last iteration
-            aflux_last.resize(ps.N_mat);
-            // vector org converged angular flux from previous time step
-            aflux_previous.resize(ps.N_mat);
-            // initializing the inital previous as the IC
-            aflux_previous = IC;
-        }
-
-        void init_af_timestep(){
-            if (ps.initialize_from_previous){
-                    // all the angular fluxes start from the previous converged time step
-                    aflux_last = aflux_last;
-                } else {
-                    // all angular fluxes start this time step iteration from 0
-                    fill(aflux_last.begin(), aflux_last.end(), 0.0);
-                }
-        }
-
-        void cycle_print_func(int t){
-            if (itter == 0)
-                cycle_print_flag = 0;
-            else 
-                cycle_print_flag = 1;
-
-            if (cycle_print){
-                if (cycle_print_flag == 0) {
-                    cout << ">>>CYCLE INFO FOR TIME STEP: " << t <<"<<<"<< endl;
-                    printf("cycle   error         error_n1      error_n2     spec_rad   cycle_time\n");
-                    printf("===================================================================================\n");
-                    cycle_print_flag = 1;
-                }
-                printf("%3d      %1.4e    %1.4e    %1.4e   %1.4e \n", itter, error, error_n1, error_n2, spec_rad );
-            }
-        }
-
-        void save_eos_data(int t){
-                string ext = ".csv";
-                string file_name = "afluxUnsorted";
-                string dt = to_string(t);
-
-                file_name = file_name + dt + ext;
-
-                std::ofstream output(file_name);
-                output << "TIME STEP: " << t << "Unsorted solution vector" << endl;
-                output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
-                for (int i=0; i<aflux_last.size(); i++){
-                    output << aflux_last[i] << "," << endl;
-                }
-
-                std::ofstream dist("x.csv");
-                dist << "x: " << endl;
-                for (int i=0; i<cells.size(); i++){
-                    dist << cells[i].x_left << "," << endl;
-                    dist << cells[i].x_left + cells[i].dx/2 << "," <<endl;
-                }
-
-
-                cout << "file saved under: " << file_name << endl;
-        }
-
-
-
-        void sourceSource( ){
-            vector<double> temp;
-            for (int i=0; i<ps.N_cells; ++i){
-                //for (int g=0; g<ps.N_groups; g++){ 
-                    for (int j=0; j<ps.N_angles; ++j){
-                        
-                        // group 1
-                        temp = manSource.group1source(cells[i].x, cells[i].dx, time,  ps.dt, ps.angles[j]);
-                        cells[i].Q[8*j  ] = temp[0];
-                        cells[i].Q[8*j+1] = temp[1];
-                        cells[i].Q[8*j+2] = temp[2];
-                        cells[i].Q[8*j+3] = temp[3];
-
-                        // group 2
-                        temp = manSource.group2source(cells[i].x, cells[i].dx, time,  ps.dt, ps.angles[j]);
-                        cells[i].Q[4+8*j  ] = temp[0];
-                        cells[i].Q[4+8*j+1] = temp[1];
-                        cells[i].Q[4+8*j+2] = temp[2];
-                        cells[i].Q[4+8*j+3] = temp[3];
-                    }
-                //}
-            }
-        }
-
-
-
-        void rocDense_linearSolver(vector<double> &A_copy, vector<double> &b){
-            //amdGPU_dgesv(A_copy, b);
-        }
-
-
-
-        void linear_solver(vector<double> &A_copy, vector<double> &b){
-            /* DO NOT CALL DEBUGING ONLY
-            Solves a single large dense matrix, in this case zeros and all
-            */
-
-            // lapack variables for the whole a problem (col major)!
-            nrhs = 1; // one column in b
-            lda = ps.N_mat;
-            ldb = 1; // leading b dimention for row major
-            ldb_col = ps.N_mat; // leading b dim for col major
-            i_piv.resize(ps.N_mat, 0);  // pivot column vector
-
-            // solve Ax=b
-            int Ndgsev = ps.N_mat;
-            dgesv_( &Ndgsev, &nrhs, &A_copy[0], &lda, &i_piv[0], &b[0], &ldb_col, &info );
-
-            if( info > 0 ) {
-                printf( "\n>>>WHOLE A ERROR<<<\n" );
-                printf( "The diagonal element of the triangular factor of A,\n" );
-                printf( "U(%i,%i) is zero, so that A is singular;\n", info, info );
-                printf( "the solution could not be computed.\n" );
-                exit( 1 );
-            }
-        }
-
-
-
-        void PBJlinear_solver(vector<double> &A_sp_cm, vector<double> &b){
-            /*breif: Solves individual dense cell matrices in parrallel on cpu
-            requires -fopenmp to copmile.
-
-            A and b store all matrices in col major in a single std:vector as
-            offsets from one another*/
-
-            // parallelized over the number of cells
-            #pragma omp parallel for
-            for (int i=0; i<ps.N_cells; ++i){
-
-                // lapack variables for a single cell (col major!)
-                nrhs = 1; // one column in b
-                lda = ps.SIZE_cellBlocks; // leading A dim for col major
-                ldb_col = ps.SIZE_cellBlocks; // leading b dim for col major
-                std::vector<int> ipiv_par(ps.SIZE_cellBlocks); // pivot vector
-                int Npbj = ps.SIZE_cellBlocks; // size of problem
-
-                // solve Ax=b in a cell
-                dgesv_( &Npbj, &nrhs, &A_sp_cm[i*ps.ELEM_cellBlocks], &lda, &ipiv_par[0], &b[i*ps.SIZE_cellBlocks], &ldb_col, &info );
-            }
-            
-            
-            if( info > 0 ) {
-                printf( "\n>>>PBJ LINALG ERROR<<<\n" );
-                printf( "The diagonal element of the triangular factor of A,\n" );
-                printf( "U(%i,%i) is zero, so that A is singular;\n", info, info );
-                printf( "the solution could not be computed.\n" );
-                exit( 1 );
-            }
-        }
-
-
-
-        void checkSpecRad (){
-            if (itter > 9){
-                if ( spec_rad > 1.0 ){
-                    printf( "\n>>>WARNING<<<\n" );
-                    printf( "An unfortunate spectral radius has been detected\n" );
-                    printf( "ρ = %1.4e ", spec_rad );
-                    printf( "the solution could not be computed\n\n" );
-                    //exit( 1 );
-                }
-            }
-        }
-
-
-
-        void publish_mms (){
-
-            std::vector<double> mms_temp(ps.N_mat);
-            std::vector<double> temp(4);
-            int index_start;
-
-            for (int tp=0; tp<ps.N_time; tp++){
-                for (int ip=0; ip<ps.N_cells; ip++){
-                    //for (int gp=0; gp<ps.N_groups; gp++){ //manual override for mms 
-                        for (int jp=0; jp<ps.N_angles; jp++){
-
-                            temp = manSource.group1af(cells[ip].x, cells[ip].dx, ps.dt*tp, ps.dt, ps.angles[jp]);
-                            index_start = (ip*(ps.SIZE_cellBlocks) + 0*(ps.SIZE_groupBlocks) + 4*jp);
-                            mms_temp[index_start] = temp[0];
-                            mms_temp[index_start+1] = temp[1];
-                            mms_temp[index_start+2] = temp[2];
-                            mms_temp[index_start+3] = temp[3];
-
-                            temp = manSource.group2af(cells[ip].x, cells[ip].dx, ps.dt*tp, ps.dt, ps.angles[jp]);
-                            index_start = (ip*(ps.SIZE_cellBlocks) + 1*(ps.SIZE_groupBlocks) + 4*jp);
-                            mms_temp[index_start] = temp[0];
-                            mms_temp[index_start+1] = temp[1];
-                            mms_temp[index_start+2] = temp[2];
-                            mms_temp[index_start+3] = temp[3];
-                        }
-                    //}
-                }
-
-                string ext = ".csv";
-                string file_name = "mms_sol";
-                string dt = to_string(tp);
-
-                file_name = file_name + dt + ext;
-
-                std::ofstream output(file_name);
-                output << "TIME STEP: " << tp << "Unsorted solution vector for mms" << endl;
-                output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
-                for (int i=0; i<mms_temp.size(); i++){
-                    output << mms_temp[i] << "," << endl;
-                }
-
-                
-            }
-
-        cout << "time integrated mms solutions published " << endl;
-        }
-
-        void run_timestep(){
-
-            init_vectors();
-
-            // allocation of the whole ass mat
-            //vector<double> A(ps.N_rm);
-
-            // generation of the whole ass mat
-            //A_gen(A, cells, ps);
-            //vector<double> A_col = row2colSq(A);
-
-            vector<double> A_sp(ps.ELEM_cellBlocks*ps.N_cells);
-            A_gen_sparse(A_sp, cells, ps);
-
-            vector<double> b(ps.N_mat);
-
-            // time step loop
-            for(int t=0; t<ps.N_time; ++t){ //
-                ps.time_val = t;
-                time += ps.dt;
-                init_af_timestep();
-
-                if ( ps.mms_bool ){
-                    sourceSource( );
-                }
-
-                vector<double> b(ps.N_mat, 0.0);
-
-                //vector<double> A_copy(ps.N_rm);
-                //vector<double> A_copy2(ps.N_rm);
-                vector<double> A_sp_copy(ps.ELEM_cellBlocks*ps.N_cells);
-                vector<double> A_sp_copy2(ps.ELEM_cellBlocks*ps.N_cells);
-                vector<double> b_copy(ps.N_mat);
-
-                // resets
-                itter = 0;          // iteration counter
-                error = 1;          // error from current iteration 
-                error_n1 = 1;       // error back one iteration (from last)
-                error_n2 = 1;       // error back two iterations
-                converged = true;   // converged boolean
-                
-                while (converged){
-
-                    // lapack requires a copy of data that it uses for row piviot (A after _dgesv != A)
-                    //A_copy = A_col;
-                    A_sp_copy2 = A_sp;
-                    A_sp_copy = A_sp;
-                    ps.assign_boundary(aflux_last);
-                    //print_vec_sd(ps.af_right_bound);
-
-                    b_gen(b, aflux_previous, aflux_last, cells, ps);
-                    b_copy = b;
-                    //b_copy2 = b;
-                    
-                    // reminder: last refers to iteration, previous refers to time step
-
-                    //Lapack solvers
-                    amdGPU_dgesv_strided_batched(A_sp_copy2, b_copy, ps);
-                    PBJlinear_solver(A_sp_copy, b);
-
-                    check_close(b, b_copy);
-                    
-                    // compute the L2 norm between the last and current iteration
-                    error = L2Norm( aflux_last, b );
-
-                    // compute spectral radius
-                    spec_rad = pow( pow(error+error_n1,2), .5) / pow(pow(error_n1+error_n2, 2), 0.5);
-                    checkSpecRad( );
-
-                    // too allow for an error & spectral radius computation we need at least three cycles (indexing from zero)
-                    if (itter > 2){
-                        // if relative error between the last and just down iteration end the time step
-                        // including false solution protection!!!!
-                        if ( error < ps.convergence_tolerance*(1-spec_rad) ){ converged = false; } }
-
-                    if (itter >= ps.max_iteration){
-                        cout << ">>>WARNING: Computation did not converge after " << ps.max_iteration << "iterations<<<" << endl;
-                        cout << "       itter: " << itter << endl;
-                        cout << "       error: " << error << endl;
-                        cout << "" << endl;
-                        converged = false;
-                    }
-
-                    aflux_last = b;
-                    
-
-                    cycle_print_func(t);
-                    
-                    itter++;
-
-                    error_n2 = error_n1;
-                    error_n1 = error;
-
-                } // end convergence loop
-
-                aflux_previous = b;
-
-                save_eos_data(t);
-
-            } // end of time step loop
-        }
-};
 
 int main(void){
 
@@ -440,7 +86,7 @@ int main(void){
     
     // problem definition
     // eventually from an input deck
-    double dx = .001;
+    double dx = .01;
     double dt = 1.0;
     vector<double> v = {1, 4};
     vector<double> xsec_total = {1, 3.0};
@@ -451,8 +97,8 @@ int main(void){
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 1000; //10
-    int N_angles = 40;
+    int N_cells = 100; //10
+    int N_angles = 10;
     int N_time = 5;
     int N_groups = 2;
 

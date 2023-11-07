@@ -10,6 +10,9 @@
 // hipcc rocsolver.cpp -I/opt/rocm/include -lrocsolver -lrocblas
 // cc
 
+extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
+
+
 void amdGPU_dgesv( std::vector<double> &hA, std::vector<double> &hb ) {
     //https://rocsolver.readthedocs.io/en/latest/api/lapack.html#_CPPv415rocsolver_dgesv14rocblas_handleK11rocblas_intK11rocblas_intPdK11rocblas_intP11rocblas_intPdK11rocblas_intP11rocblas_int
     
@@ -152,8 +155,8 @@ void amdGPU_dgesv_strided_batched( std::vector<double> &hA, std::vector<double> 
 
     rocblas_destroy_handle(handle);
     //std::cout << "gamma" << std::endl;
-}
 
+}
 
 
 /*

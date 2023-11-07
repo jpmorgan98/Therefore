@@ -12,6 +12,8 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
 void A_gen(std::vector<double> &A, std::vector<cell> cells, problem_space ps);
 void quadrature(std::vector<double> &angles, std::vector<double> &weights);
 void outofbounds_check(int index, std::vector<double> &vec);
+void b_gen_const_win_iter(std::vector<double> &b, std::vector<double> &aflux_previous, std::vector<cell> cells, problem_space ps);
+void b_gen_var_win_iter(std::vector<double> &b, std::vector<double> &aflux_last, problem_space ps);
 
 void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vector<double> &aflux_last, std::vector<cell> cells, problem_space ps){
     //brief: builds b
@@ -24,10 +26,6 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
     int index_start_p1;
 
     for (int i=0; i<ps.N_cells; i++){
-
-        if (i == 0){
-        } else if (i==ps.N_cells-1){
-        }
         
         for (int g=0; g<ps.N_groups; g++){
 
@@ -64,9 +62,6 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
 
                         af_rb    = aflux_last[index_start_p1];
                         af_hn_rb = aflux_last[index_start_p1+2];
-
-                        //cout << af_rb << endl;
-                        //cout << af_hn_rb << endl;
 
                     }
                     //cell &cell, int group, double mu, int angle, double af_hl_L, double af_hl_R, double af_R, double af_hn_R
@@ -105,6 +100,117 @@ void b_gen(std::vector<double> &b, std::vector<double> &aflux_previous, std::vec
         }
     }
 }
+
+
+
+void b_gen_const_win_iter(std::vector<double> &b, std::vector<double> &aflux_previous, std::vector<cell> cells, problem_space ps){
+    //brief: builds b
+
+    vector<double> b_small;
+
+    // helper index
+    int index_start;
+    int index_start_n1;
+    int index_start_p1;
+
+    for (int i=0; i<ps.N_cells; i++){
+        
+        for (int g=0; g<ps.N_groups; g++){
+            
+            for (int j=0; j<ps.N_angles; j++){
+
+                // the first index in the smallest chunk of 4
+                index_start = (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+                // 4 blocks organized af_l, af_r, af_hn_l, af_hn_r
+
+                // angular flux from the k-1+1/2 from within the cell
+                double af_hl_l = aflux_previous[index_start+2];
+                double af_hl_r = aflux_previous[index_start+3];
+
+                // negative angle
+                if (ps.angles[j] < 0){
+                    //cell &cell, int group, double mu, int angle, double af_hl_L, double af_hl_R, double af_R, double af_hn_R
+                    b_small = b_neg_const_win_itteration(cells[i], g, j, af_hl_l, af_hl_r);
+
+                // positive angles
+                } else {
+                     //b_pos_const_win_itteration( cell &cell, int group, int angle, double af_hl_L, double af_hl_R )
+                    b_small = b_pos_const_win_itteration(cells[i], g, j, af_hl_l, af_hl_r);
+                }
+
+                outofbounds_check(index_start,   b);
+                outofbounds_check(index_start+1, b);
+                outofbounds_check(index_start+2, b);
+                outofbounds_check(index_start+3, b);
+                
+                b[index_start]   = b_small[0];
+                b[index_start+1] = b_small[1];
+                b[index_start+2] = b_small[2];
+                b[index_start+3] = b_small[3];
+            }
+        }
+    }
+}
+
+
+void b_gen_var_win_iter(std::vector<double> &b, std::vector<double> &aflux_last, problem_space ps){
+    //brief: builds b
+
+    // helper index
+    int index_start;
+    int index_start_n1;
+    int index_start_p1;
+
+    for (int i=0; i<ps.N_cells; i++){
+        for (int g=0; g<ps.N_groups; g++){
+            for (int j=0; j<ps.N_angles; j++){
+
+                // the first index in the smallest chunk of 4
+                index_start = (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+                // 4 blocks organized af_l, af_r, af_hn_l, af_hn_r
+
+                // negative angle
+                if (ps.angles[j] < 0){
+                    if (i == ps.N_cells-1){ // right boundary condition
+                        
+                        b[index_start+1] -= ps.angles[j]*ps.boundary_condition(1,g,j,0);
+                        b[index_start+3] -= ps.angles[j]*ps.boundary_condition(1,g,j,1);
+
+                    } else { // pulling information from right to left
+                        index_start_p1 = index_start + ps.SIZE_cellBlocks;
+
+                        //outofbounds_check(index_start_p1, aflux_last);
+                        //outofbounds_check(index_start_p1+2, aflux_last);
+
+                        b[index_start+1] -= ps.angles[j]*aflux_last[index_start_p1];
+                        b[index_start+3] -= ps.angles[j]*aflux_last[index_start_p1+2];
+                    }
+
+                // positive angles
+                } else {
+                    if (i == 0){ // left boundary condition
+                        
+                        b[index_start]    += ps.angles[j]*ps.boundary_condition(0,g,j,0);
+                        b[index_start+2]  += ps.angles[j]*ps.boundary_condition(0,g,j,1);
+
+                    } else { // pulling information from left to right
+                        index_start_n1 = index_start - ps.SIZE_cellBlocks;
+
+                        //outofbounds_check(index_start_n1+1, aflux_last);
+                        //outofbounds_check(index_start_n1+3, aflux_last);
+
+                        b[index_start]    += ps.angles[j]*aflux_last[index_start_n1+1];
+                        b[index_start+2]  += ps.angles[j]*aflux_last[index_start_n1+3];
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+
 
 void A_gen_sparse(std::vector<double> &A, std::vector<cell> cells, problem_space ps){
     /*breif: only non zero elements of the array are stored in a single array of total size
