@@ -60,10 +60,13 @@ For CUDA GPU
 For AMD GPU
     on Lockhart (AMD MI200 devlopment machine)
         module load rocm
-        cc main.cpp -I/opt/rocm/include -lrocsolver -lrocblas -D__HIP_PLATFORM_AMD__
+        cc main.cpp -isystem "/opt/rocm-5.5.1/include" -I/opt/rocm/include -lrocsolver -lrocblas -D__HIP_PLATFORM_AMD__
         hipcc hipSolver.cpp -I/opt/rocm/include -L/opt/rocm/lib -lrocsolver -lrocblas
     Generally on a system with 
         /opt/rocm/bin/hipcc -I/opt/rocm/include -c example.cpp /opt/rocm/bin/hipcc -o example -L/opt/rocm/lib -lrocsolver -lrocblas example.o
+
+
+/opt/rocm/llvm/bin/clang++ -isystem "/opt/rocm-5.5.1/include"  --offload-arch=gfx90a -O3 -mllvm -amdgpu-early-inline-all=true -mllvm -amdgpu-function-calls=false  -O3 --hip-link --rtlib=compiler-rt -unwindlib=libgcc  -I/opt/rocm/include -L/opt/rocm/lib -lrocsolver -lrocblas -/home/joamorga/miniconda3/lib -llapack -x hip main.cpp
 
 */
 
@@ -86,7 +89,7 @@ int main(void){
     
     // problem definition
     // eventually from an input deck
-    double dx = .01;
+    double dx = .2;
     double dt = 1.0;
     vector<double> v = {1, 4};
     vector<double> xsec_total = {1, 3.0};
@@ -97,9 +100,9 @@ int main(void){
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 100; //10
-    int N_angles = 10;
-    int N_time = 5;
+    int N_cells = 5; //10
+    int N_angles = 2;
+    int N_time = 1;
     int N_groups = 2;
 
     // 4 = N_subspace (2) * N_subtime (2)

@@ -212,6 +212,7 @@ void b_gen_var_win_iter(std::vector<double> &b, std::vector<double> &aflux_last,
 
 
 
+
 void A_gen_sparse(std::vector<double> &A, std::vector<cell> cells, problem_space ps){
     /*breif: only non zero elements of the array are stored in a single array of total size
     (N_an*N_group*4)**2*N_cells. A cell block soultion is then stored in a column

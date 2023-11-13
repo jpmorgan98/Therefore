@@ -4,6 +4,8 @@
 #include <vector>
 #include <rocsolver/rocsolver.h> // for all the rocsolver C interfaces and type declarations
 #include <hip/hip_runtime_api.h> // for hip functions
+//#include <class.h>
+
 
 // compile
 // module load rocm
@@ -76,7 +78,8 @@ class problem_space{
             int SIZE_cellBlocks;
             int N_cells;
             int ELEM_cellBlocks;
-    };*/
+    };
+*/
 
 void amdGPU_dgesv_strided_batched( std::vector<double> &hA, std::vector<double> &hb, problem_space ps) {
     
@@ -159,6 +162,112 @@ void amdGPU_dgesv_strided_batched( std::vector<double> &hA, std::vector<double> 
 }
 
 
+__global__ void ebe_diff(double *v1, double *v2, double *dvectemp, int n){
+    int i = hipBlockDim_x * hipBlockIdx_x + hipThreadIdx_x;
+    if (i < n){
+        dvectemp[i] = v1[i] - v2[i];
+    }
+}
+
+double gpuL2norm(rocblas_handle handle, double *v1, double *v2, int n){
+    rocblas_int N = n;
+    rocblas_int incx = 1;
+
+    double hresult1, hresult2;
+
+    double *dresult1, *dresult2, *dvectemp;
+    hipMalloc(&dresult1, sizeof(double));
+    hipMalloc(&dresult2, sizeof(double));
+    hipMalloc(&dvectemp, sizeof(double)*n);
+
+    //rocblas_status rocblas_dznrm2(rocblas_handle handle, rocblas_int n, const rocblas_double_complex *x, rocblas_int incx, double *result)
+    rocblas_dnrm2(handle, N, v1, incx, dresult1);
+    hipDeviceSynchronize();
+    hipMemcpy(&hresult1, dresult1, sizeof(double), hipMemcpyDeviceToHost);
+    std::cout << "error result" << std::endl;
+    std::cout << hresult1 << std::endl;
+
+    int threadsperblock = 256;
+    int blockspergrid = (n + (threadsperblock - 1)) / threadsperblock;
+
+    hipLaunchKernelGGL(ebe_diff, dim3(blockspergrid), dim3(threadsperblock), 0, 0, v1, v2, dvectemp, n);
+    hipDeviceSynchronize();
+
+    rocblas_dnrm2(handle, N, dvectemp, incx, dresult2);
+    hipDeviceSynchronize();
+
+    hipMemcpy(&hresult2, dresult2, sizeof(double), hipMemcpyDeviceToHost);
+    std::cout << "error result" << std::endl;
+    std::cout << hresult2 << std::endl;
+
+    hipFree(dresult1);
+    hipFree(dresult2);
+
+    return(hresult2/hresult1);
+}
+
+//double *boundary_condition,
+__global__ void GPUb_gen_var_win_iter(double *b, double *aflux_last, double *angles, int *ps){
+    //brief: builds b
+
+    int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    double boundary_condition = 0;
+
+    int N_cells = ps[0]; //N_cells
+    int N_groups = ps[1]; //N_groups
+    int N_angles = ps[2]; //N_angles
+
+    int SIZE_cellBlocks = 4*N_angles*N_groups;
+    int SIZE_groupBlocks = 4*N_angles;
+
+    if (i < N_cells){
+        int index_start;
+        int index_start_n1;
+        int index_start_p1;
+        
+        for (int g=0; g<N_groups; g++){
+            for (int j=0; j<N_angles; j++){
+
+                // the first index in the smallest chunk of 4
+                index_start = (i*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j);
+                // 4 blocks organized af_l, af_r, af_hn_l, af_hn_r
+
+                // negative angle
+                if (angles[j] < 0){
+                    if (i == N_cells-1){ // right boundary condition
+                        
+                        b[index_start+1] -= angles[j]*boundary_condition;
+                        b[index_start+3] -= angles[j]*boundary_condition;
+
+                    } else { // pulling information from right to left
+                        index_start_p1 = index_start + SIZE_cellBlocks;
+
+                        b[index_start+1] -= angles[j]*aflux_last[index_start_p1];
+                        b[index_start+3] -= angles[j]*aflux_last[index_start_p1+2];
+                    }
+
+                // positive angles
+                } else {
+                    if (i == 0){ // left boundary condition
+                        
+                        b[index_start]    += angles[j]*boundary_condition;
+                        b[index_start+2]  += angles[j]*boundary_condition;
+
+                    } else { // pulling information from left to right
+                        index_start_n1 = index_start - SIZE_cellBlocks;
+
+                        b[index_start]    += angles[j]*aflux_last[index_start_n1+1];
+                        b[index_start+2]  += angles[j]*aflux_last[index_start_n1+3];
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
 /*
 
 int Test_amdGPU_dgesv_batched(){
@@ -205,11 +314,10 @@ int Test_amdGPU_dgesv(){
 }
 
 
-/*
 int main(){
     //hipcc rocsolver.cpp -I/opt/rocm/include -lrocsolver -lrocblas
 
-    Test_amdGPU_dgesv_batched();
+    //Test_amdGPU_dgesv_batched();
     //Test_amdGPU_dgesv();
     return( 1 );
 }*/
