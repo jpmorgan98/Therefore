@@ -66,9 +66,10 @@ For AMD GPU
         /opt/rocm/bin/hipcc -I/opt/rocm/include -c example.cpp /opt/rocm/bin/hipcc -o example -L/opt/rocm/lib -lrocsolver -lrocblas example.o
 
 
-/opt/rocm/llvm/bin/clang++ -isystem "/opt/rocm-5.5.1/include"  --offload-arch=gfx90a -O3 -mllvm -amdgpu-early-inline-all=true -mllvm -amdgpu-function-calls=false  -O3 --hip-link --rtlib=compiler-rt -unwindlib=libgcc  -I/opt/rocm/include -L/opt/rocm/lib -lrocsolver -lrocblas -/home/joamorga/miniconda3/lib -llapack -x hip main.cpp
+/opt/rocm/llvm/bin/clang++ -isystem "/opt/rocm-5.5.1/include"  --offload-arch=gfx90a -O3 -mllvm -amdgpu-early-inline-all=true -mllvm -amdgpu-function-calls=false  -O3 --hip-link --rtlib=compiler-rt -unwindlib=libgcc  -I/opt/rocm/include -L/opt/rocm/lib -lrocsolver -lrocblas -L/home/joamorga/miniconda3/lib -llapack -x hip main.cpp
 
 */
+
 
 
 using namespace std;
@@ -77,7 +78,7 @@ void eosPrint(ts_solutions state);
 
 // row major to start -> column major for lapack computation
 
-
+//
 
 // i space, m is angle, k is time, g is energy group
 
