@@ -22,7 +22,7 @@ class run{
 
 
         bool cycle_print = true;
-        int cycle_print_flag = 0; // for printing headers
+        
 
         int itter;          // iteration counter
         double error;       // error from current iteration
@@ -64,9 +64,9 @@ class run{
         }
 
         void cycle_print_func(int t){
-            if (itter == 0)
-                cycle_print_flag = 0;
-            else 
+            int cycle_print_flag = 0; // for printing headers
+
+            if (itter != 0) 
                 cycle_print_flag = 1;
 
             if (cycle_print){
@@ -299,7 +299,7 @@ class run{
 
                 //convergenceLoop(A, b_const_cpu, t);
 
-                ConvergenceLoopOptGPU( A, b_const_gpu );
+                ConvergenceLoopOptGPU( A, b_const_gpu, t );
 
                 //check_close(b_const_cpu, b_const_gpu);
 
@@ -321,6 +321,7 @@ class run{
 
                 // b is also used up and has to be ressinged
                 std::vector<double> b = b_const;
+                
 
                 //assing angular flux
                 ps.assign_boundary( aflux_last );
@@ -332,7 +333,6 @@ class run{
                 //Lapack solvers
                 //amdGPU_dgesv_strided_batched(A_sp_copy2, b_copy, ps);
                 PBJlinear_solver( A_copy, b );
-                
 
                 //check_close(b, b_copy);
                 
@@ -357,6 +357,10 @@ class run{
                     converged = false;
                 }
 
+                if (itter == 3){
+                    converged = false;
+                }
+
                 aflux_last = b;
                 
                 cycle_print_func(t);
@@ -369,7 +373,7 @@ class run{
             } // end convergence loop
         }
 
-        void ConvergenceLoopOptGPU( std::vector<double> &hA, std::vector<double> &hb_const){
+        void ConvergenceLoopOptGPU( std::vector<double> &hA, std::vector<double> &hb_const, int t){
             /*intilizes the information for a itteration on gpu
                 - allocates memory
                 - moves data back and forth
@@ -396,10 +400,12 @@ class run{
             std::vector<double> herror (3);
             std::vector<int> probSpace {ps.N_cells, ps.N_groups, ps.N_angles};
 
+            print_vec_sd_int(probSpace);
+
             // allocate memory on GPU
             double *dA, *db, *dangles, *dboundary, *daflux_last, *db_const;
             rocblas_int *ipiv, *dinfo;
-            int *dps;
+            int *dps;  // without further inreration
 
             // alloaction of problem
             hipMalloc(&dA, sizeof(double)*strideA*batch_count);         // allocates memory for strided matrix container
@@ -415,40 +421,52 @@ class run{
             hipMalloc(&dps, sizeof(int)*3);
 
             // copy data to GPU
-            hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
             hipMemcpy(db_const, &hb_const[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
             hipMemcpy(daflux_last, &aflux_previous[0], sizeof(double)*ps.N_mat, hipMemcpyHostToDevice);
             hipMemcpy(dangles, &ps.angles[0], sizeof(double)*ps.N_angles, hipMemcpyHostToDevice);
-            hipMemcpy(&dps, &probSpace[0], sizeof(int)*3, hipMemcpyHostToDevice);
+            hipMemcpy(dps, &probSpace[0], sizeof(int)*3, hipMemcpyHostToDevice);
 
-            int itter = 0;
+            //hipMemcpy(dps, &probSpace[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
+
+            itter = 0;
 
             int threadsperblock = 256;
             int blockspergrid = (ps.N_mat + (threadsperblock - 1)) / threadsperblock;
-
 
             std::vector<double> hb(ps.N_mat);
             std::vector<double> hb_const_check(ps.N_mat);
 
             // on gpu!
             while (converged){
+
+                hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
+                hipMemcpy(daflux_last, &hb[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
                 hipMemcpy(db, &hb_const[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
+                
 
                 //gpu_assign_boundary(dboundary, daflux_last);
                 //hipDeviceSynchronize();
 
                 //GPUb_gen_var_win_iter(double *b, double *aflux_last, , double *angles, int *ps)
+                hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
+                //std::cout << "NEW ITTERATION" << std::endl;
+                //std::cout << "" << std::endl;
+                //std::cout << "b inital" << std::endl;
+                //print_vec_sd(hb);
+
                 int threadsperblock = 256;
                 int blockspergrid = (ps.N_cells + (threadsperblock - 1)) / threadsperblock;
-                hipLaunchKernelGGL(GPUb_gen_var_win_iter, dim3(blockspergrid), dim3(threadsperblock), 0, 0, db, daflux_last, dangles, dps );
+                hipLaunchKernelGGL(GPUb_gen_var_win_iter, dim3(blockspergrid), dim3(threadsperblock), 0, 0, 
+                                    db, daflux_last, dangles, dps );
                 hipDeviceSynchronize();
 
-                hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
                 //hipMemcpy(&hb_const_check[0], db_const, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
 
-                std::cout<<"in itteration print" <<std::endl;
-                std::cout << "b" << std::endl;
+                //std::cout<<"in itteration print" <<std::endl;
+                hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
+                //std::cout << "b after initilization" << std::endl;
                 //print_vec_sd(hb);
+                ///print_vec_sd(hb);
                 //std::cout << "b_const" << std::endl;
                 //print_vec_sd(hb_const);
                 //std::cout << "db_const_check" << std::endl;
@@ -458,16 +476,24 @@ class run{
                 hipDeviceSynchronize();
 
                 hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-                hipMemcpy(&hb_const_check[0], daflux_last, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-                std::cout << "soultion vector" <<std::endl;
-                print_vec_sd(hb);
-                print_vec_sd(hb_const_check);
+
+                herror[0] = L2Norm( aflux_last, hb );
+                
+                error = herror[0];
+                error_n2 = error_n1;
+                error_n1 = error;
+
+                //print_vec_sd(herror);
+                //hipMemcpy(&hb_const_check[0], daflux_last, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
 
                 //warning! daflux_last is in-out
-                herror[0] = gpuL2norm(handle, daflux_last, db, ps.N_mat);
-                hipDeviceSynchronize();
+                //herror[0] = gpuL2norm(handle, daflux_last, db, ps.N_mat);
+                //hipDeviceSynchronize();
+                // what is not understood is the functional argument in the design situation
 
-                print_vec_sd(herror);
+                // Right I wunderstand but I have not been functionally around to establish an undercurrent for desning of the facilities
+                // I think if I narrow out the underlying funciton of the creation I should be able to establish the grea
+                //print_vec_sd(herror);
 
                 // on cpu
                 spec_rad = pow( pow(herror[0]+herror[1],2), .5) / pow(pow(herror[1]+herror[2], 2), 0.5);
@@ -483,16 +509,21 @@ class run{
                                 converged = false;
                 }
 
-                if (itter == 2){
-                    converged = false;
-                }
+                //if (itter == 3){
+                //    converged = false;
+                //}
 
-                daflux_last = db;
+                cycle_print_func(t);
+
+                aflux_last = hb;
                 
                 itter++;
 
                 herror[2] = herror[1];
                 herror[1] = herror[0];
+
+                hipFree(ipiv);
+                hipFree(dinfo);
             }
 
             hipMemcpy(&aflux_previous[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
@@ -502,8 +533,7 @@ class run{
             hipFree(daflux_last);
             hipFree(dangles);
             hipFree(dboundary);
-            hipFree(ipiv);
-            hipFree(dinfo);
+            
         }
 };
 

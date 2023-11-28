@@ -61,13 +61,13 @@ For AMD GPU
     on Lockhart (AMD MI200 devlopment machine)
         module load rocm
         cc main.cpp -isystem "/opt/rocm-5.5.1/include" -I/opt/rocm/include -lrocsolver -lrocblas -D__HIP_PLATFORM_AMD__
-        hipcc hipSolver.cpp -I/opt/rocm/include -L/opt/rocm/lib -lrocsolver -lrocblas
+        hipcc -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack main.cpp
     Generally on a system with 
         /opt/rocm/bin/hipcc -I/opt/rocm/include -c example.cpp /opt/rocm/bin/hipcc -o example -L/opt/rocm/lib -lrocsolver -lrocblas example.o
 
 
 /opt/rocm/llvm/bin/clang++ -isystem "/opt/rocm-5.5.1/include"  --offload-arch=gfx90a -O3 -mllvm -amdgpu-early-inline-all=true -mllvm -amdgpu-function-calls=false  -O3 --hip-link --rtlib=compiler-rt -unwindlib=libgcc  -I/opt/rocm/include -L/opt/rocm/lib -lrocsolver -lrocblas -L/home/joamorga/miniconda3/lib -llapack -x hip main.cpp
-
+gfx803
 */
 
 
@@ -90,7 +90,7 @@ int main(void){
     
     // problem definition
     // eventually from an input deck
-    double dx = .2;
+    double dx = .25;
     double dt = 1.0;
     vector<double> v = {1, 4};
     vector<double> xsec_total = {1, 3.0};
@@ -101,7 +101,7 @@ int main(void){
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 5; //10
+    int N_cells = 4; //10
     int N_angles = 2;
     int N_time = 1;
     int N_groups = 2;
@@ -140,7 +140,7 @@ int main(void){
     ps.angles = angles;
     ps.weights = weights;
     ps.initialize_from_previous = false;
-    ps.max_iteration = int(1e4);
+    ps.max_iteration = int(30);
     // 0 for vac 1 for reflecting 3 for mms
     ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle

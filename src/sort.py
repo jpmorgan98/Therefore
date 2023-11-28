@@ -11,10 +11,10 @@ def group1cont(x,mu,t):
 def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
-N_angles = 10
-N_cells = 100
+N_angles = 2
+N_cells = 4
 N_groups = 2
-N_time = 5
+N_time = 1
 
 dt = 1.0
 
@@ -140,7 +140,7 @@ plt.figure()
 
 
 #plt.plot(x, temp, '+', label='cont')
-plt.plot(x, sf_wp[2,0,:], label='g1 -- no source')
+plt.plot(x, sf_wp[0,0,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[5,0,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[5,1,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[7,0,:], label='g1 -- no source')

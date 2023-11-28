@@ -209,6 +209,7 @@ double gpuL2norm(rocblas_handle handle, double *v1, double *v2, int n){
 //double *boundary_condition,
 __global__ void GPUb_gen_var_win_iter(double *b, double *aflux_last, double *angles, int *ps){
     //brief: builds b
+    //printf( "howdy\n" );
 
     int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -217,6 +218,9 @@ __global__ void GPUb_gen_var_win_iter(double *b, double *aflux_last, double *ang
     int N_cells = ps[0]; //N_cells
     int N_groups = ps[1]; //N_groups
     int N_angles = ps[2]; //N_angles
+
+    //printf("%d\n", i);
+    //printf("%d\n", N_cells);
 
     int SIZE_cellBlocks = 4*N_angles*N_groups;
     int SIZE_groupBlocks = 4*N_angles;
