@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <fstream>
-#include<algorithm>
+#include <algorithm>
 
 /*brief: generic utility functions*/
 
@@ -48,6 +48,19 @@ void print_cm(std::vector<double> vec){
     }
 }
 
+
+void print_cm_sp(std::vector<double> vec, int offset, int N){
+    using namespace std;
+
+    cout << "Matrix is of size ["<<N<<","<<N<<"]"<<endl;
+
+    for (int i=offset; i<offset + N; i++){
+        for (int j=0; j<N; j++){
+            printf("%5.2f ", vec[j*N+i]);
+        }
+        printf("\n");
+    }
+}
 
 
 void print_vec(int N, double *vec){
@@ -190,9 +203,70 @@ inline void outofbounds_check(int index, std::vector<double> &vec){
 
     if ( index < 0 ) {
         cout<<">>>>>>>>>>>>ERROR<<<<<<<<<<<<"<<endl;
-        cout<<"sometihng was indexed under 0"<<endl;
+        cout<<"something was indexed under 0"<<endl;
+        cout<<"index: " << index <<" size of vec: "<<vec.size()<<endl;
     } else if ( index >= vec.size() ) {
         cout<<">>>>>>>>>>>>>>>>>>>>ERROR<<<<<<<<<<<<<<<<<<<<"<<endl;
-        cout<<"sometihng was indexed over a vectors max size"<<endl;
+        cout<<"something was indexed over a vectors max size"<<endl;
+        cout<<"index: " << index <<" size of vec: "<<vec.size()<<endl;
     }
+}
+
+std::vector<double> row2colSq(std::vector<double> row){
+    /*brief */
+    
+    int SIZE = sqrt(row.size());
+
+    std::vector<double> col(SIZE*SIZE);
+
+    for (int i = 0; i < SIZE; ++i){
+        for (int j = 0; j < SIZE; ++j){
+            outofbounds_check(i * SIZE + j, col);
+            outofbounds_check(j * SIZE + i, row);
+
+
+            col[ i * SIZE + j ] = row[ j * SIZE + i ];
+        }
+    }
+
+    return(col);
+}
+
+
+void check_close(std::vector<double> v1, std::vector<double> v2){
+    using namespace std;
+
+    int n1 = v1.size();
+    int n2 = v2.size();
+
+    double rtol=1e-05;
+    double atol=1e-08;
+
+    if (n1 != n2){
+        cout<< "check_close: vectors are not of same size" <<endl;
+        cout << "n1 " << n1 << "    n2 " << n2 << endl;
+    }
+
+    double r1;
+    double r2;
+
+    bool checker = true;
+    for (int i=0; i<n1; ++i){
+
+        r1 = abs(v1[i] - v2[i]);
+        r2 = atol + rtol * abs(v2[i]);
+
+        if ( r1 >= r2 ){
+            checker = false;
+        }
+    }
+
+    if ( checker == false ){
+        cout << "ERROR: Two vectors that should be equal arent" << endl;
+    } else {
+        cout << "Vectors checked and where the same" <<endl;
+    }
+
+
+
 }

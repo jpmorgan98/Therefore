@@ -1,7 +1,7 @@
 #include <cmath>
 #include <vector>
 
-# define e 2.7182818
+# define expVal 2.7182818
 
 class mms{
     public:
@@ -40,8 +40,13 @@ class mms{
 
             double afa = group1afUNINT(mu,x_i,t_p) - group1afUNINT(mu,x_m,t_p);
             double afb = group1afUNINT(mu,x_p,t_p) - group1afUNINT(mu,x_i,t_p);
-            double afc = ( afa + (group1afUNINT(mu,x_i,t_m) - group1sourceUNINT(mu,x_m,t_m)) ) / 2;
+            double afc = ( afa + (group1afUNINT(mu,x_i,t_m) - group1afUNINT(mu,x_m,t_m)) ) / 2;
             double afd = ( afb +  (group1afUNINT(mu,x_p,t_m) - group1afUNINT(mu,x_i,t_m)) ) / 2;
+
+            //afa = abs(afa);
+            //afb = abs(afb);
+            //afc = abs(afc);
+            //afd = abs(afd);
 
             return( std::vector<double> {afa, afb, afc, afd} );
         }
@@ -101,8 +106,13 @@ class mms{
 
             double afa = group2afUNINT(mu,x_i,t_p) - group2afUNINT(mu,x_m,t_p);
             double afb = group2afUNINT(mu,x_p,t_p) - group2afUNINT(mu,x_i,t_p);
-            double afc = ( afa + (group2afUNINT(mu,x_i,t_m) - group2sourceUNINT(mu,x_m,t_m)) ) / 2;
+            double afc = ( afa + (group2afUNINT(mu,x_i,t_m) - group2afUNINT(mu,x_m,t_m)) ) / 2;
             double afd = ( afb +  (group2afUNINT(mu,x_p,t_m) - group2afUNINT(mu,x_i,t_m)) ) / 2;
+
+            //afa = abs(afa);
+            //afb = abs(afb);
+            //afc = abs(afc);
+            //afd = abs(afd);
 
             return( std::vector<double> {afa, afb, afc, afd} );
         }
