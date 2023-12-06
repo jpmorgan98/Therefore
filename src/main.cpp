@@ -90,7 +90,7 @@ int main(void){
     
     // problem definition
     // eventually from an input deck
-    double dx = .25;
+    double dx = .01;
     double dt = 1.0;
     vector<double> v = {1, 4};
     vector<double> xsec_total = {1, 3.0};
@@ -101,8 +101,8 @@ int main(void){
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 4; //10
-    int N_angles = 2;
+    int N_cells = 170; //10
+    int N_angles = 24;
     int N_time = 1;
     int N_groups = 2;
 
@@ -140,7 +140,7 @@ int main(void){
     ps.angles = angles;
     ps.weights = weights;
     ps.initialize_from_previous = false;
-    ps.max_iteration = int(30);
+    ps.max_iteration = int(1e4);
     // 0 for vac 1 for reflecting 3 for mms
     ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle
@@ -154,8 +154,7 @@ int main(void){
 
     // allocates a zero vector of nessacary size
     ps.initilize_boundary();
-
-    /*
+    
     // =================== REEDS Problem
 
     // reeds problem mat stuff 
@@ -193,18 +192,23 @@ int main(void){
         cellCon.dx = dx_reeds[region_id];
         cellCon.v = v;
         cellCon.dt = dt;
-        cellCon.Q = vector<double> {Source_reeds[region_id], Source_reeds[region_id], Source_reeds[region_id], Source_reeds[region_id],
-                                    0, 0, 0, 0};
+
+        vector<double> temp (N_angles*N_groups*4, 1.0);
+        for (int p=0; p<temp.size(); ++p){temp[p] *= Source_reeds[region_id];}
+        cellCon.Q = temp;
+
+        //cellCon.Q = vector<double> {Source_reeds[region_id], Source_reeds[region_id], Source_reeds[region_id], Source_reeds[region_id],
+        //                            0, 0, 0, 0};
+                            
         cellCon.region_id = region_id;
         cellCon.N_angle = N_angles;
 
         cells.push_back(cellCon);
     }
-    */
 
    // ===================
    
-
+    /*
     vector<cell> cells;
 
     for (int i=0; i<N_cells; i++){
@@ -231,7 +235,7 @@ int main(void){
         cells.push_back(cellCon);
 
     }
-
+    */
     ps.mms_bool = false;
 
     // ===================

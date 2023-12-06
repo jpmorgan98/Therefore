@@ -73,6 +73,7 @@ void amdGPU_dgesv( std::vector<double> &hA, std::vector<double> &hb ) {
 }
 
 /*
+// for testing
 class problem_space{
         public:
             int SIZE_cellBlocks;
@@ -184,8 +185,6 @@ double gpuL2norm(rocblas_handle handle, double *v1, double *v2, int n){
     rocblas_dnrm2(handle, N, v1, incx, dresult1);
     hipDeviceSynchronize();
     hipMemcpy(&hresult1, dresult1, sizeof(double), hipMemcpyDeviceToHost);
-    std::cout << "error result" << std::endl;
-    std::cout << hresult1 << std::endl;
 
     int threadsperblock = 256;
     int blockspergrid = (n + (threadsperblock - 1)) / threadsperblock;
@@ -197,14 +196,31 @@ double gpuL2norm(rocblas_handle handle, double *v1, double *v2, int n){
     hipDeviceSynchronize();
 
     hipMemcpy(&hresult2, dresult2, sizeof(double), hipMemcpyDeviceToHost);
-    std::cout << "error result" << std::endl;
-    std::cout << hresult2 << std::endl;
 
     hipFree(dresult1);
     hipFree(dresult2);
+    hipFree(dvectemp);
 
     return(hresult2/hresult1);
 }
+
+
+__global__ void makeGDSame(double *v1, double *v2, int n ){
+    int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if (i < n){
+        v2[i] = v1[i];
+    }
+}
+
+void makeSameGPU(double *v1, double *v2, int n){
+
+    int threadsperblock = 256;
+    int blockspergrid = (n + (threadsperblock - 1)) / threadsperblock;
+
+    hipLaunchKernelGGL(makeGDSame, dim3(blockspergrid), dim3(threadsperblock), 0, 0, v1, v2, n);
+}
+
 
 //double *boundary_condition,
 __global__ void GPUb_gen_var_win_iter(double *b, double *aflux_last, double *angles, int *ps){

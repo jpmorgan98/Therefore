@@ -3,10 +3,8 @@
 #include <hip/hip_runtime.h>
 #include "rocsolver.cpp"
 
-// row major to start -> column major for lapack computation
+// lapack function! To copmile requires <-Ipath/to/lapack/headers -llapack>
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
-//double gpuL2norm(rocblas_handle handle, double *v1, double *v2, int n);
-//__global__ gpu_b_gen_var_win_iter(double *b, double *aflux_last, double *angles, double *boundary, int *ps );
 
 
 class run{
@@ -132,13 +130,6 @@ class run{
         }
 
 
-
-        void rocDense_linearSolver(vector<double> &A_copy, vector<double> &b){
-            //amdGPU_dgesv(A_copy, b);
-        }
-
-
-
         void linear_solver(vector<double> &A_copy, vector<double> &b){
             /* DO NOT CALL DEBUGING ONLY
             Solves a single large dense matrix, in this case zeros and all
@@ -212,8 +203,6 @@ class run{
             }
         }
 
-
-
         void publish_mms (){
 
             std::vector<double> mms_temp(ps.N_mat);
@@ -265,10 +254,8 @@ class run{
 
             init_vectors();
 
-            // allocation of the whole ass mat
-            //vector<double> A(ps.N_rm);
-
             // generation of the whole ass mat
+            //vector<double> A(ps.N_rm);
             //A_gen(A, cells, ps);
             //vector<double> A_col = row2colSq(A);
 
@@ -292,16 +279,16 @@ class run{
                 error_n2 = 1;       // error back two iterations
                 converged = true;   // converged boolean
                 
-                vector<double> b_const_cpu(ps.N_mat);
-                vector<double> b_const_gpu(ps.N_mat);
-                b_gen_const_win_iter(b_const_cpu, aflux_previous, cells, ps);
+                vector<double> b_const_cpu( ps.N_mat );
+                vector<double> b_const_gpu( ps.N_mat );
+                b_gen_const_win_iter( b_const_cpu, aflux_previous, cells, ps );
                 b_const_gpu = b_const_cpu;
 
-                //convergenceLoop(A, b_const_cpu, t);
+                //convergenceLoop( A, b_const_cpu, t );
 
                 ConvergenceLoopOptGPU( A, b_const_gpu, t );
 
-                //check_close(b_const_cpu, b_const_gpu);
+                //check_close( b_const_cpu, b_const_gpu );
 
                 aflux_previous = b_const_gpu;
 
@@ -313,6 +300,11 @@ class run{
         void convergenceLoop(std::vector<double> &A, std::vector<double> &b_const, int t){
 
             aflux_last = aflux_previous;
+            converged = true;
+            itter = 0;
+            error = 1.0;
+            error_n1 = 1.0;
+            error_n2 = 1.0;
 
             while (converged){
 
@@ -331,13 +323,13 @@ class run{
                 b_gen_var_win_iter( b, aflux_last, ps );
 
                 //Lapack solvers
-                //amdGPU_dgesv_strided_batched(A_sp_copy2, b_copy, ps);
+                //amdGPU_dgesv_strided_batched(A_copy, b, ps);
                 PBJlinear_solver( A_copy, b );
 
                 //check_close(b, b_copy);
                 
                 // compute the L2 norm between the last and current iteration
-                error = L2Norm( aflux_last, b );
+                error = infNorm_error( aflux_last, b );
 
                 // compute spectral radius
                 spec_rad = pow( pow(error+error_n1,2), .5) / pow(pow(error_n1+error_n2, 2), 0.5);
@@ -357,10 +349,6 @@ class run{
                     converged = false;
                 }
 
-                if (itter == 3){
-                    converged = false;
-                }
-
                 aflux_last = b;
                 
                 cycle_print_func(t);
@@ -377,12 +365,13 @@ class run{
             /*intilizes the information for a itteration on gpu
                 - allocates memory
                 - moves data back and forth
-                - destroyes gpu memory manages runtime
+                - destroyes gpu memory
+                - manages runtime
             all functions above are unaware of gpu runtime*/
             //
 
             // perameters
-            rocblas_int N = ps.SIZE_cellBlocks;           // ros and cols in each household problem
+            rocblas_int N = ps.SIZE_cellBlocks;           // rows and cols in each household problem
             rocblas_int lda = ps.SIZE_cellBlocks;         // leading dimension of A in each household problem
             rocblas_int ldb = ps.SIZE_cellBlocks;         // leading dimension of B in each household problem
             rocblas_int nrhs = 1;                         // number of nrhs in each household problem
@@ -394,6 +383,7 @@ class run{
             rocblas_handle handle;
             rocblas_create_handle(&handle);
 
+            // when profiling the funtion 
             // preload rocBLAS GEMM kernels (optional)
             // rocblas_initialize();
 
@@ -402,12 +392,12 @@ class run{
 
             print_vec_sd_int(probSpace);
 
-            // allocate memory on GPU
+            // defininig pointers to memory on GPU
             double *dA, *db, *dangles, *dboundary, *daflux_last, *db_const;
             rocblas_int *ipiv, *dinfo;
             int *dps;  // without further inreration
 
-            // alloaction of problem
+            // double alloaction of problem
             hipMalloc(&dA, sizeof(double)*strideA*batch_count);         // allocates memory for strided matrix container
             hipMalloc(&db_const, sizeof(double)*strideB*batch_count);         // allocates memory for strided rhs container
             hipMalloc(&db, sizeof(double)*strideB*batch_count);         // allocates memory for strided rhs container
@@ -415,7 +405,7 @@ class run{
             hipMalloc(&dangles, sizeof(double)*ps.N_angles);
             hipMalloc(&dboundary, sizeof(double)*ps.N_angles*ps.N_groups*2);
 
-            // integers
+            // integer allocation
             hipMalloc(&ipiv, sizeof(rocblas_int)*strideB*batch_count);  // allocates memory for integer pivot vector in GPU
             hipMalloc(&dinfo, sizeof(rocblas_int)*batch_count);
             hipMalloc(&dps, sizeof(int)*3);
@@ -426,8 +416,6 @@ class run{
             hipMemcpy(dangles, &ps.angles[0], sizeof(double)*ps.N_angles, hipMemcpyHostToDevice);
             hipMemcpy(dps, &probSpace[0], sizeof(int)*3, hipMemcpyHostToDevice);
 
-            //hipMemcpy(dps, &probSpace[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
-
             itter = 0;
 
             int threadsperblock = 256;
@@ -435,6 +423,7 @@ class run{
 
             std::vector<double> hb(ps.N_mat);
             std::vector<double> hb_const_check(ps.N_mat);
+            converged = true;
 
             // on gpu!
             while (converged){
@@ -442,17 +431,6 @@ class run{
                 hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
                 hipMemcpy(daflux_last, &hb[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
                 hipMemcpy(db, &hb_const[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
-                
-
-                //gpu_assign_boundary(dboundary, daflux_last);
-                //hipDeviceSynchronize();
-
-                //GPUb_gen_var_win_iter(double *b, double *aflux_last, , double *angles, int *ps)
-                hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-                //std::cout << "NEW ITTERATION" << std::endl;
-                //std::cout << "" << std::endl;
-                //std::cout << "b inital" << std::endl;
-                //print_vec_sd(hb);
 
                 int threadsperblock = 256;
                 int blockspergrid = (ps.N_cells + (threadsperblock - 1)) / threadsperblock;
@@ -460,46 +438,18 @@ class run{
                                     db, daflux_last, dangles, dps );
                 hipDeviceSynchronize();
 
-                //hipMemcpy(&hb_const_check[0], db_const, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-
-                //std::cout<<"in itteration print" <<std::endl;
-                hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-                //std::cout << "b after initilization" << std::endl;
-                //print_vec_sd(hb);
-                ///print_vec_sd(hb);
-                //std::cout << "b_const" << std::endl;
-                //print_vec_sd(hb_const);
-                //std::cout << "db_const_check" << std::endl;
-                //print_vec_sd(hb_const_check);
-
                 rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
                 hipDeviceSynchronize();
 
-                hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-
-                herror[0] = L2Norm( aflux_last, hb );
-                
-                error = herror[0];
-                error_n2 = error_n1;
-                error_n1 = error;
-
-                //print_vec_sd(herror);
-                //hipMemcpy(&hb_const_check[0], daflux_last, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-
-                //warning! daflux_last is in-out
-                //herror[0] = gpuL2norm(handle, daflux_last, db, ps.N_mat);
-                //hipDeviceSynchronize();
-                // what is not understood is the functional argument in the design situation
-
-                // Right I wunderstand but I have not been functionally around to establish an undercurrent for desning of the facilities
-                // I think if I narrow out the underlying funciton of the creation I should be able to establish the grea
-                //print_vec_sd(herror);
+                // warning! daflux_last is in-out!
+                error = gpuL2norm(handle, daflux_last, db, ps.N_mat);
+                hipDeviceSynchronize();
 
                 // on cpu
-                spec_rad = pow( pow(herror[0]+herror[1],2), .5) / pow(pow(herror[1]+herror[2], 2), 0.5);
+                spec_rad = pow( pow(error+error_n1,2), .5) / pow(pow(error_n1+error_n2, 2), 0.5);
 
                 if (itter > 2){
-                    if ( error < ps.convergence_tolerance*(1-spec_rad) ){ converged = false; } }
+                    if ( error < ps.convergence_tolerance ){ converged = false; } } //*(1-spec_rad)
 
                 if (itter >= ps.max_iteration){
                                 cout << ">>>WARNING: Computation did not converge after " << ps.max_iteration << "iterations<<<" << endl;
@@ -509,101 +459,29 @@ class run{
                                 converged = false;
                 }
 
-                //if (itter == 3){
-                //    converged = false;
-                //}
-
                 cycle_print_func(t);
 
+                hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
                 aflux_last = hb;
                 
                 itter++;
 
-                herror[2] = herror[1];
-                herror[1] = herror[0];
+                error_n2 = error_n1;
+                error_n1 = error;
 
-                hipFree(ipiv);
-                hipFree(dinfo);
             }
 
             hipMemcpy(&aflux_previous[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
 
+            hipFree(ipiv);
+            hipFree(dinfo);
             hipFree(dA);
             hipFree(db);
             hipFree(daflux_last);
             hipFree(dangles);
             hipFree(dboundary);
+            hipFree(db_const);
+            hipFree(dps);
             
         }
 };
-
-
-
-
-
-/*
-__global__ gpu_b_gen_var_win_iter(double *b, double *aflux_last, double *angles, double *boundary, int *ps ){
-    //brief: builds b
-
-    // helper index
-    int index_start;
-    int index_start_n1;
-    int index_start_p1;
-
-    int i =  blockDim.x;
-    int g = blockIdx.x;
-    int j = threadIdx.x;
-
-    //for (int i=0; i<ps.N_cells; i++){
-    //    for (int g=0; g<ps.N_groups; g++){
-    //        for (int j=0; j<ps.N_angles; j++){
-
-    //ps is an int vector holding data about the problem
-    // [0] is the total number of elements in b
-    // [1] SIZE_cellBlocks
-    // [2] SIZE_groupBlocks
-    // [3]
-
-    // the first index in the smallest chunk of 4
-    int index_start = (i*(ps[1]) +  g*(ps[2]) + 4*j);
-    // 4 blocks organized af_l, af_r, af_hn_l, af_hn_r
-
-    if (index_start < ps[0])
-
-        // negative angle
-        if (angles[j] < 0){
-            if (i == ps.N_cells-1){ // right boundary condition
-                int boundary_index = g*4 +j*3;
-                b[index_start+1] -= angles[j]*boundary[boundary_index];
-                b[index_start+3] -= angles[j]*boundary[boundary_index];
-
-            } else { // pulling information from right to left
-                index_start_p1 = index_start + ps[1];
-
-                //outofbounds_check(index_start_p1, aflux_last);
-                //outofbounds_check(index_start_p1+2, aflux_last);
-
-                b[index_start+1] -= angles[j]*aflux_last[index_start_p1];
-                b[index_start+3] -= angles[j]*aflux_last[index_start_p1+2];
-            }
-
-        // positive angles
-        } else {
-            if (i == 0){ // left boundary condition
-
-                int boundary_index = g*4 +j*3;
-                
-                b[index_start]    += angles[j]*boundary[boundary_index];
-                b[index_start+2]  += angles[j]*boundary[boundary_index];
-
-            } else { // pulling information from left to right
-                index_start_n1 = index_start - ps[1];
-
-                b[index_start]    += angles[j]*aflux_last[index_start_n1+1];
-                b[index_start+2]  += angles[j]*aflux_last[index_start_n1+3];
-            }
-        }
-    }
-
-
-*/

@@ -263,6 +263,8 @@ void check_close(std::vector<double> v1, std::vector<double> v2){
 
     if ( checker == false ){
         cout << "ERROR: Two vectors that should be equal arent" << endl;
+    } else {
+        cout << "Vectors checked and where the same" <<endl;
     }
 
 
