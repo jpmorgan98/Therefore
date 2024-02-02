@@ -314,7 +314,6 @@ class run{
                 // b is also used up and has to be ressinged
                 std::vector<double> b = b_const;
                 
-
                 //assing angular flux
                 ps.assign_boundary( aflux_last );
 

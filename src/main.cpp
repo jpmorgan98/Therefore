@@ -41,6 +41,7 @@ For LAPACK (not dense)
             brew install lapack
         Should be able to compile with: 
             g++-13 main.cpp -std=c++20 -llapack
+            need to disable gpu shit
             
 For Trilinos (see Tril.md for insturcations)
 
