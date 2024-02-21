@@ -138,7 +138,7 @@ class run{
             // lapack variables for the whole a problem (col major)!
             nrhs = 1; // one column in b
             lda = ps.N_mat;
-            ldb = 1; // leading b dimention for row major
+            ldb = 1; // leading b dimension for row major
             ldb_col = ps.N_mat; // leading b dim for col major
             i_piv.resize(ps.N_mat, 0);  // pivot column vector
 
@@ -158,8 +158,8 @@ class run{
 
 
         void PBJlinear_solver(vector<double> &A_sp_cm, vector<double> &b){
-            /*breif: Solves individual dense cell matrices in parrallel on cpu
-            requires -fopenmp to copmile.
+            /*breif: Solves individual dense cell matrices in parallel on cpu
+            requires -fopenmp to compile.
 
             A and b store all matrices in col major in a single std:vector as
             offsets from one another*/
@@ -361,13 +361,14 @@ class run{
         }
 
         void ConvergenceLoopOptGPU( std::vector<double> &hA, std::vector<double> &hb_const, int t){
-            /*intilizes the information for a itteration on gpu
+            /*initializes the information for a iteration on gpu
                 - allocates memory
                 - moves data back and forth
-                - destroyes gpu memory
+                - destroys gpu memory
                 - manages runtime
             all functions above are unaware of gpu runtime*/
             //
+
 
             // perameters
             rocblas_int N = ps.SIZE_cellBlocks;           // rows and cols in each household problem

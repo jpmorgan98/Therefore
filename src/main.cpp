@@ -43,7 +43,6 @@ For LAPACK (not dense)
             g++-13 main.cpp -std=c++20 -llapack
             need to disable gpu shit
             
-For Trilinos (see Tril.md for insturcations)
 
 For CUDA GPU
     On LASSEN

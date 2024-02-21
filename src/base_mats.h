@@ -159,3 +159,68 @@ void b_neg_var_win_itteration( std::vector<double> &b, double mu, double af_R, d
     b[1] -= mu*af_R;
     b[3] -= mu*af_hn_R;
 }
+
+
+std::vector<double> c_pos(cell &cell, int group, double mu, int angle, std::vector<double> &sf, int offset, double af_hl_L, double af_hl_R, double af_LB, double af_hn_LB){
+    /*
+    hl is previous time step info
+    LB is sweep info
+    sf is previous scatter source info
+    */
+
+    double timer2 = cell.dx/(2*cell.v[group] * cell.dt);
+
+    int helper = 4*angle + group*4*cell.N_angle;
+
+    outofbounds_check(0 + helper, cell.Q);
+    outofbounds_check(1 + helper, cell.Q);
+    outofbounds_check(2 + helper, cell.Q);
+    outofbounds_check(3 + helper, cell.Q);
+
+    outofbounds_check(offset+0, sf);
+    outofbounds_check(offset+1, sf);
+    outofbounds_check(offset+2, sf);
+    outofbounds_check(offset+3, sf);
+
+    outofbounds_check(group, cell.xsec_scatter);
+
+    std::vector<double> c_pos ={cell.dx/4*(cell.xsec_scatter[group]*sf[offset+0] + cell.Q[0+helper]) + timer2*af_hl_L + mu*af_LB,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+1] + cell.Q[1+helper]) + timer2*af_hl_R,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+2] + cell.Q[2+helper]) + mu*af_hn_LB,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+3] + cell.Q[3+helper])};
+
+    return (c_pos);
+}
+
+std::vector<double> c_neg(cell &cell, int group, double mu, int angle, std::vector<double> &sf, int offset, double af_hl_L, double af_hl_R, double af_RB, double af_hn_RB){
+    /*
+    hl is previous time step info
+    LB is sweep info
+    sf is previous scatter source info for the whole problem
+
+    All other vectors are not funcitonal expectations
+    */
+
+    double timer2 = cell.dx/(2*cell.v[group] * cell.dt);
+
+    int helper = 4*angle + group*4*cell.N_angle;
+
+    outofbounds_check(0 + helper, cell.Q);
+    outofbounds_check(1 + helper, cell.Q);
+    outofbounds_check(2 + helper, cell.Q);
+    outofbounds_check(3 + helper, cell.Q);
+
+    outofbounds_check(offset+0, sf);
+    outofbounds_check(offset+1, sf);
+    outofbounds_check(offset+2, sf);
+    outofbounds_check(offset+3, sf);
+
+    outofbounds_check(group, cell.xsec_scatter);
+
+    std:vector<double> c_neg = {cell.dx/4*(cell.xsec_scatter[group]*sf[offset+0] + cell.Q[0+helper]) + timer2*af_hl_L,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+1] + cell.Q[1+helper]) + timer2*af_hl_R - mu*af_RB,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+2] + cell.Q[2+helper]) ,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+3] + cell.Q[3+helper]) - mu*af_hn_RB};
+
+    return c_neg;
+}

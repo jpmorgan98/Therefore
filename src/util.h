@@ -266,7 +266,26 @@ void check_close(std::vector<double> v1, std::vector<double> v2){
     } else {
         cout << "Vectors checked and where the same" <<endl;
     }
-
-
-
 }
+
+/*
+bool check_exact(std::vector<double> v1, std::vector<double> v2){
+    int n1 = v1.size();
+    int n2 = v2.size();
+
+    if (n1 != n2){
+        cout<< "check_close: vectors are not of same size" <<endl;
+        cout << "n1 " << n1 << "    n2 " << n2 << endl;
+    }
+
+    bool checker = true;
+    for (int i=0; i<n1; ++i){
+
+        r1 = abs(v1[i] - v2[i]);
+        r2 = atol + rtol * abs(v2[i]);
+
+        if ( r1 >= r2 ){
+            checker = false;
+        }
+    }
+}*/

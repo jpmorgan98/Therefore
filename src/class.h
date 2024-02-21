@@ -62,6 +62,7 @@ class problem_space{
         int ELEM_cellBlocks;
         int SIZE_groupBlocks;
         int SIZE_angleBlocks;
+        int ELEM_sf;
 
         vector<int> boundary_conditions = {0,0};
         vector<double> af_left_bound;
