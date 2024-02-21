@@ -254,7 +254,7 @@ int main(void){
     solutions.push_back(sol_con);
 
 
-    run problem;
+    runOCI problem;
     problem.ps = ps;
     problem.cells = cells;
     problem.IC = IC;

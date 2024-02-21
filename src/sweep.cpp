@@ -386,11 +386,11 @@ int main(){
 
     
     std::vector<double> af_previous(N_mat, 0);
-    std::vector<double> af(N_mat, 0);
 
     std::cout << "entering conv loop" <<std::endl;
 
-    convergenceLoop( af, af_previous, cells, ps);
+    timeLoop(af_previous, cells, ps);
+    //convergenceLoop( af, af_previous, cells, ps);
 
     std::cout << "done" << std::endl;
 
