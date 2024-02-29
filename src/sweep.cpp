@@ -158,7 +158,7 @@ void computeSF(std::vector<double> &af, std::vector<double> &sf, problem_space &
 
 void compute_g2g(std::vector<cell> &cells, std::vector<double> &sf, problem_space &ps ) {
     /* Energy is communicated by fuddleing around with the source term in the cell component
-       NOTE: Source is a scalar flux in transport sweeps and is angular flux in OCI! (I don't think this is right)
+    NOTE: Source is a scalar flux in transport sweeps and is angular flux in OCI! (I don't think this is right)
     */
 
     // reset the Q term to be isotropic material source
@@ -184,27 +184,36 @@ void compute_g2g(std::vector<cell> &cells, std::vector<double> &sf, problem_spac
 
     // First two for loops are over all group to group scattering matrix
     // these are mostly reduction commands, should use that when heading to GPU if needing to offload
-    for (int i=0; i<ps.N_groups; ++i){ // g'
-        for (int j=0; j<ps.N_groups; ++j){ // g
-            for (int c=0; c<ps.N_cells; ++c){ // across cells
+    for (int i=0; i<ps.N_groups; ++i){ // g
+        for (int j=0; j<ps.N_groups; ++j){ // g'
 
-                outofbounds_check(4*j+0, cells[c].Q);
-                outofbounds_check(4*j+1, cells[c].Q);
-                outofbounds_check(4*j+2, cells[c].Q);
-                outofbounds_check(4*j+3, cells[c].Q);
+            if (i != j){
+                for (int c=0; c<ps.N_cells; ++c){ // across cells
 
-                outofbounds_check(i*ps.N_groups + j, cells[c].xsec_g2g_scatter);
+                    outofbounds_check(4*j+0, cells[c].Q);
+                    outofbounds_check(4*j+1, cells[c].Q);
+                    outofbounds_check(4*j+2, cells[c].Q);
+                    outofbounds_check(4*j+3, cells[c].Q);
 
-                outofbounds_check(c*4*ps.N_groups + i*4 + 0, sf);
-                outofbounds_check(c*4*ps.N_groups + i*4 + 1, sf);
-                outofbounds_check(c*4*ps.N_groups + i*4 + 2, sf);
-                outofbounds_check(c*4*ps.N_groups + i*4 + 3, sf);
+                    outofbounds_check(i*ps.N_groups + j, cells[c].xsec_g2g_scatter);
 
-                cells[c].Q[4*j+0] += cells[c].xsec_g2g_scatter[i*ps.N_groups + j] * sf[c*4*ps.N_groups + i*4 + 0];
-                cells[c].Q[4*j+1] += cells[c].xsec_g2g_scatter[i*ps.N_groups + j] * sf[c*4*ps.N_groups + i*4 + 1];
-                cells[c].Q[4*j+2] += cells[c].xsec_g2g_scatter[i*ps.N_groups + j] * sf[c*4*ps.N_groups + i*4 + 2];
-                cells[c].Q[4*j+3] += cells[c].xsec_g2g_scatter[i*ps.N_groups + j] * sf[c*4*ps.N_groups + i*4 + 3];
+                    outofbounds_check(c*4*ps.N_groups + i*4 + 0, sf);
+                    outofbounds_check(c*4*ps.N_groups + i*4 + 1, sf);
+                    outofbounds_check(c*4*ps.N_groups + i*4 + 2, sf);
+                    outofbounds_check(c*4*ps.N_groups + i*4 + 3, sf);
 
+                    cells[c].Q[4*i+0] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[c*4*ps.N_groups + j*4 + 0];
+                    cells[c].Q[4*i+1] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[c*4*ps.N_groups + j*4 + 1];
+                    cells[c].Q[4*i+2] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[c*4*ps.N_groups + j*4 + 2];
+                    cells[c].Q[4*i+3] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[c*4*ps.N_groups + j*4 + 3];
+
+                }
+            } else {
+                for (int c=0; c<ps.N_cells; ++c){
+                    if (cells[c].xsec_g2g_scatter[j+i*ps.N_groups] != 0){
+                        std::cout << ">>>> warning a g2g scatter xsec is non-zero for a group to group" << std::endl;
+                    }
+                }
             }
         }
     }
@@ -468,7 +477,7 @@ int main(){
         cellCon.v = v;
         cellCon.dt = dt;
         cellCon.material_source = material_source;
-        cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 1};
+        cellCon.xsec_g2g_scatter = vector<double> {0, .1, 1, 0};
 
         //vector<double> temp (N_angles*N_groups*4, 1.0);
         //for (int p=0; p<temp.size(); ++p){temp[p] = Q[0];}
