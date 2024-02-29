@@ -170,7 +170,7 @@ std::vector<double> c_pos(cell &cell, int group, double mu, int angle, std::vect
 
     double timer2 = cell.dx/(2*cell.v[group] * cell.dt);
 
-    int helper = 4*angle + group*4*cell.N_angle;
+    int helper = group*4;
 
     outofbounds_check(0 + helper, cell.Q);
     outofbounds_check(1 + helper, cell.Q);
@@ -203,7 +203,7 @@ std::vector<double> c_neg(cell &cell, int group, double mu, int angle, std::vect
 
     double timer2 = cell.dx/(2*cell.v[group] * cell.dt);
 
-    int helper = 4*angle + group*4*cell.N_angle;
+    int helper = group*4;
 
     outofbounds_check(0 + helper, cell.Q);
     outofbounds_check(1 + helper, cell.Q);

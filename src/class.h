@@ -10,16 +10,19 @@ class cell{
         double x_left;
         double x;
         double x_right;
-        std::vector<double> xsec_scatter;
-        std::vector<double> xsec_total;
-        std::vector<double> v;
-
-        // Q stores non-homogenous terms in rm-form of dims [4 x N_groups x N_angles] where within a group
+        std::vector<double> xsec_scatter; // the within group scattering cross section
+        std::vector<double> xsec_total; // the total cross section of
+        std::vector<double> v; // the velocity of the particles in energy
+        std::vector<double> xsec_g2g_scatter; // the group to group scattering terms in each cell
+        std::vector<double> material_source; // the actual material source
+        
+        std::vector<double> Q;
+        // Q stores non-homogenous terms in rm-form of dims [4 x N_groups] for normal problems
+        // or for MMS: [4 x N_groups x N_angles] where within a group
             // 0   left half cell space integrated, time averaged
             // 1   right half cell space integrated, time averaged
             // 2   left half cell space integrated, time edge
-            // 2   right half cell space integrated, time edge
-        std::vector<double> Q;
+            // 3   right half cell space integrated, time edge
 
         double dx;
         double dt;

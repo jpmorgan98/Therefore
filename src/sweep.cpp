@@ -80,8 +80,8 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
                     double af_hn_LB;
 
                     if (i == 0){ //LHS boundary condition
-                        af_LB     = 1;//ps.boundary_condition[];
-                        af_hn_LB  = 1;//ps.boundary_condition[];
+                        af_LB     = 0;//ps.boundary_condition[];
+                        af_hn_LB  = 0;//ps.boundary_condition[];
                     } else {
                         outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 1, af_last );
                         outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 3, af_last );
@@ -113,7 +113,7 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
 
 void quadrature(std::vector<double> &angles, std::vector<double> &weights){
 
-    // infred from size of pre-allocated std::vector
+    // infered from size of pre-allocated std::vector
     int N_angles = angles.size();
 
     // allocation for function
@@ -156,6 +156,60 @@ void computeSF(std::vector<double> &af, std::vector<double> &sf, problem_space &
     }
 }
 
+void compute_g2g(std::vector<cell> &cells, std::vector<double> &sf, problem_space &ps ) {
+    /* Energy is communicated by fuddleing around with the source term in the cell component
+       NOTE: Source is a scalar flux in transport sweeps and is angular flux in OCI! (I don't think this is right)
+    */
+
+    // reset the Q term to be isotropic material source
+    // material_source does not have L R average components so its 2*N_groups
+    for (int c=0; c<ps.N_cells; ++c){
+        for (int g=0; g<ps.N_groups; ++g){
+
+            outofbounds_check(4*g+0, cells[c].Q);
+            outofbounds_check(4*g+1, cells[c].Q);
+            outofbounds_check(4*g+2, cells[c].Q);
+            outofbounds_check(4*g+3, cells[c].Q);
+
+            outofbounds_check(2*g+0, cells[c].material_source);
+            outofbounds_check(2*g+1, cells[c].material_source);
+
+            cells[c].Q[4*g+0] = cells[c].material_source[2*g+0];
+            cells[c].Q[4*g+1] = cells[c].material_source[2*g+0];
+            cells[c].Q[4*g+2] = cells[c].material_source[2*g+1];
+            cells[c].Q[4*g+3] = cells[c].material_source[2*g+1];
+        }
+        
+    }
+
+    // First two for loops are over all group to group scattering matrix
+    // these are mostly reduction commands, should use that when heading to GPU if needing to offload
+    for (int i=0; i<ps.N_groups; ++i){ // g'
+        for (int j=0; j<ps.N_groups; ++j){ // g
+            for (int c=0; c<ps.N_cells; ++c){ // across cells
+
+                outofbounds_check(4*j+0, cells[c].Q);
+                outofbounds_check(4*j+1, cells[c].Q);
+                outofbounds_check(4*j+2, cells[c].Q);
+                outofbounds_check(4*j+3, cells[c].Q);
+
+                outofbounds_check(i*ps.N_groups + j, cells[c].xsec_g2g_scatter);
+
+                outofbounds_check(c*4*ps.N_groups + i*4 + 0, sf);
+                outofbounds_check(c*4*ps.N_groups + i*4 + 1, sf);
+                outofbounds_check(c*4*ps.N_groups + i*4 + 2, sf);
+                outofbounds_check(c*4*ps.N_groups + i*4 + 3, sf);
+
+                cells[c].Q[4*j+0] += cells[c].xsec_g2g_scatter[i*ps.N_groups + j] * sf[c*4*ps.N_groups + i*4 + 0];
+                cells[c].Q[4*j+1] += cells[c].xsec_g2g_scatter[i*ps.N_groups + j] * sf[c*4*ps.N_groups + i*4 + 1];
+                cells[c].Q[4*j+2] += cells[c].xsec_g2g_scatter[i*ps.N_groups + j] * sf[c*4*ps.N_groups + i*4 + 2];
+                cells[c].Q[4*j+3] += cells[c].xsec_g2g_scatter[i*ps.N_groups + j] * sf[c*4*ps.N_groups + i*4 + 3];
+
+            }
+        }
+    }
+}
+
 
 void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previous, std::vector<cell> &cells, problem_space &ps){
 
@@ -172,6 +226,9 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
     computeSF( af_previous, sf_new, ps );
 
     while (converged){
+
+        // communicate energy!
+        compute_g2g( cells, sf_new, ps );
         
         // sweep
         sweep( af_new, af_previous, sf_new, cells, ps );
@@ -246,11 +303,46 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
 } // end convergence function
 
 
+void check_g2g(std::vector<cell> &cells, problem_space &ps){
 
+    int N_expected = ps.N_groups-1 * ps.N_groups-1;
+
+    if (N_expected < 0) {N_expected = 2;}
+
+    for (int i=0; i<ps.N_cells; ++i){
+        if (N_expected != cells[i].xsec_g2g_scatter.size()){
+            std::cout << ">>> Warning: Size of g2g scattering matrix not correct " << std::endl;
+            std::cout << "      in cell: " << i << " expected " << N_expected << " got " << cells[i].xsec_g2g_scatter.size() << std::endl;
+        }
+    }
+    
+}
+
+
+void init_g2g(std::vector<cell> &cells, problem_space &ps){
+
+    int N_expected = (ps.N_groups-1) * (ps.N_groups-1);
+
+    for (int i=0; i<ps.N_cells; ++i){
+        cells[i].xsec_g2g_scatter = std::vector<double> (N_expected, 0.0);
+    }
+
+}
+
+void init_Q(std::vector<cell> &cells, problem_space &ps){
+
+    int Nq_exp = 4*ps.N_groups;
+
+    for (int i=0; i<ps.N_cells; ++i){
+        cells[i].Q = std::vector<double> (Nq_exp, 0.0);
+    }
+}
 
 void timeLoop(std::vector<double> af_previous, std::vector<cell> &cells, problem_space &ps){
 
     std::vector<double> af_solution( ps.N_mat );
+
+    //check_g2g(cells, ps);
 
     for (int t=0; t<ps.N_time; ++t){
 
@@ -294,20 +386,20 @@ int main(){
     
     // problem definition
     // eventually from an input deck
-    double dx = .25;
-    double dt = 1.0;
+    double dx = .1;
+    double dt = 0.5;
     vector<double> v = {1, 4};
     vector<double> xsec_total = {1, 3.0};
-    vector<double> xsec_scatter = {0.2, 0};
+    vector<double> xsec_scatter = {0, 0};
     double ds = 0.0;
-    vector<double> Q = {0, 0};
+    vector<double> material_source = {1, 0, 0, 0}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 4; //10
+    int N_cells = 10; //10
     int N_angles = 2;
-    int N_time = 1;
+    int N_time = 2;
     int N_groups = 2;
 
     // 4 = N_subspace (2) * N_subtime (2)
@@ -343,7 +435,7 @@ int main(){
     ps.angles = angles;
     ps.weights = weights;
     ps.initialize_from_previous = false;
-    ps.max_iteration = int(10);
+    ps.max_iteration = int(1e3);
     // 0 for vac 1 for reflecting 3 for mms
     ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle
@@ -375,23 +467,25 @@ int main(){
         cellCon.dx = dx;
         cellCon.v = v;
         cellCon.dt = dt;
+        cellCon.material_source = material_source;
+        cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 1};
 
-        vector<double> temp (N_angles*N_groups*4, 1.0);
-        for (int p=0; p<temp.size(); ++p){temp[p] = Q[0];}
-        cellCon.Q = temp;
-        cellCon.N_angle = N_angles;
+        //vector<double> temp (N_angles*N_groups*4, 1.0);
+        //for (int p=0; p<temp.size(); ++p){temp[p] = Q[0];}
+        //cellCon.Q = temp;
+        //cellCon.N_angle = N_angles;
 
         cells.push_back(cellCon);
+        
     }
 
-    
+    init_Q(cells, ps);
+
     std::vector<double> af_previous(N_mat, 0);
 
     std::cout << "entering conv loop" <<std::endl;
 
     timeLoop(af_previous, cells, ps);
-    //convergenceLoop( af, af_previous, cells, ps);
-
     std::cout << "done" << std::endl;
 
     return(1);
