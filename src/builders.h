@@ -266,14 +266,15 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
     NOTE: ROW MAJOR FORMAT
     */
 
-   bool ds_make = true;
+    for (int g=0; g<ps.N_groups; g++){
 
-   for (int g=0; g<ps.N_groups; g++){
+        int index_start = 4*g*ps.N_angles *4*ps.N_angles*ps.N_groups + 4*g*ps.N_angles;
+
+        int Adim_angle = 4*ps.N_angles; 
 
         vector<double> A_c_g(4*ps.N_angles * 4*ps.N_angles);
         vector<double> A_c_g_a(4*4);
-        vector<double> S(4*ps.N_angles * 4*ps.N_angles);
-        vector<double> DS(4*ps.N_angles * 4*ps.N_angles);
+        
 
         for (int j=0; j<ps.N_angles; j++){
             if (ps.angles[j] > 0){
@@ -292,43 +293,58 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
                     int id_acell  = ((4*ps.N_angles * 4*j) + (4*j) + (4*ps.N_angles)*r + (c));
                     int id_ancell = 4*r + c;
                     A_c_g[id_acell] = A_c_g_a[id_ancell]; 
-
-                    
                 }
             }
         }
 
-        // within group scattering 
-        S = scatter(cells[i].dx, cells[i].xsec_scatter[g], ps.weights, ps.N_angles);
-
-        // down scattering!!!!
-        bool ds_flag = false;
-        
-        if (g==1){
-            
-            double xsec_ds = ps.ds;
-            //down scattering look the same just with an off axis terms
-            DS = scatter(cells[i].dx, xsec_ds, ps.weights, ps.N_angles);
-            ds_flag = true;
-        }
-
-        int index_start = 4*g*ps.N_angles * 4*ps.N_angles*ps.N_groups + 4*g*ps.N_angles;
-        int Adim_angle = 4*ps.N_angles; 
-
         for (int r=0; r<Adim_angle; r++){
-            for (int c=0; c<Adim_angle; c++){
+                for (int c=0; c<Adim_angle; c++){
+                    int id_c_g = index_start + r*(Adim_angle*ps.N_groups) + c;
+                    int id_group = Adim_angle*r + c;
 
-                int id_group = Adim_angle*r + c;
-                int id_c_g = index_start + r*(Adim_angle*ps.N_groups) + c;
+                    A_c[id_c_g] = A_c_g[id_group];
+            }
+        }
+    }
 
-                A_c[id_c_g] = A_c_g[id_group] - S[id_group];
+    //print_rm(A_c);
 
-                if (g==1){
-                    A_c[id_c_g-4*ps.N_angles] -= DS[id_group];
+    //down scattering look the same just with an off axis terms
+
+    // Scattering looks like row major allined std::vector<doubles> 
+    // g->g'
+    //     _       g'       _
+    //    | 0->0  0->1  0->2 |  fastest
+    //  g | 1->0  1->1  1->2 |     |
+    //    | 2->0  2->1  2->2 |  slowest
+    //    -                 -
+    //  Thus the diagnol is the within group scttering
+
+    for (int g=0; g<ps.N_groups; ++g){ //g
+        for (int gp=0; gp<ps.N_groups; ++gp){ //g'
+
+            vector<double> g2gp_scatter(4*ps.N_angles * 4*ps.N_angles);
+
+            int index_start = 4*g*ps.N_angles *4*ps.N_angles*ps.N_groups + 4*gp*ps.N_angles;
+
+            int Adim_angle = 4*ps.N_angles; 
+            
+            g2gp_scatter = scatter(cells[i].dx, cells[i].xsec_scatter[gp + ps.N_groups*g], ps.weights, ps.N_angles);
+
+            for (int r=0; r<Adim_angle; r++){
+                for (int c=0; c<Adim_angle; c++){
+                    int id_group = Adim_angle*r + c;
+
+                    int id_c_g = index_start + r*(Adim_angle*ps.N_groups) + c;
+
+                    // [putting scattering in the big one]
+                    A_c[id_c_g-4*ps.N_angles] -= g2gp_scatter[id_group];
                 }
             }
         }
     }
+
+    //print_rm(A_c);
 }
 
 

@@ -244,7 +244,7 @@ class run{
                     output << mms_temp[i] << "," << endl;
                 }
 
-                
+            
             }
 
             cout << "time integrated mms solutions published " << endl;
@@ -284,11 +284,11 @@ class run{
                 b_gen_const_win_iter( b_const_cpu, aflux_previous, cells, ps );
                 b_const_gpu = b_const_cpu;
 
-                //convergenceLoop( A, b_const_cpu, t );
+                convergenceLoop( A, b_const_cpu, t );
 
                 ConvergenceLoopOptGPU( A, b_const_gpu, t );
 
-                //check_close( b_const_cpu, b_const_gpu );
+                check_close( b_const_cpu, b_const_gpu );
 
                 aflux_previous = b_const_gpu;
 
