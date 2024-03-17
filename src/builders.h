@@ -316,29 +316,31 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
     //     _       g'       _
     //    | 0->0  0->1  0->2 |  fastest
     //  g | 1->0  1->1  1->2 |     |
-    //    | 2->0  2->1  2->2 |  slowest
-    //    -                 -
+    //    | 2->0  2->1  2->2 |     \/
+    //    -                 -   slowest
     //  Thus the diagnol is the within group scttering
 
-    for (int g=0; g<ps.N_groups; ++g){ //g
+    for (int g=0; g<ps.N_groups; ++g){ //g problem with this loop!!!
         for (int gp=0; gp<ps.N_groups; ++gp){ //g'
 
             vector<double> g2gp_scatter(4*ps.N_angles * 4*ps.N_angles);
 
             int index_start = 4*g*ps.N_angles *4*ps.N_angles*ps.N_groups + 4*gp*ps.N_angles;
+            //int index_start = 4*ps.N_angles*gp + 4*4*ps.N_angles*ps.N_angles*ps.N_groups
 
             int Adim_angle = 4*ps.N_angles; 
             
             g2gp_scatter = scatter(cells[i].dx, cells[i].xsec_scatter[gp + ps.N_groups*g], ps.weights, ps.N_angles);
 
-            for (int r=0; r<Adim_angle; r++){
-                for (int c=0; c<Adim_angle; c++){
+            // indexing from Angle blocks within a group to cell blocks of all groups
+            for (int r=0; r<Adim_angle; r++){ //row
+                for (int c=0; c<Adim_angle; c++){ //col 
                     int id_group = Adim_angle*r + c;
 
                     int id_c_g = index_start + r*(Adim_angle*ps.N_groups) + c;
 
                     // [putting scattering in the big one]
-                    A_c[id_c_g-4*ps.N_angles] -= g2gp_scatter[id_group];
+                    A_c[id_c_g] -= g2gp_scatter[id_group];
                 }
             }
         }

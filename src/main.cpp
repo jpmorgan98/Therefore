@@ -92,11 +92,13 @@ int main(void){
     // eventually from an input deck
     double dx = 01;
     double dt = 1.0;
-    vector<double> v = {1, .5};
+    vector<double> v = {1, 1};
     vector<double> xsec_total = {1.5454, 0.45468};
+    //vector<double> xsec_total = {1, 1};
     vector<double> xsec_scatter = {0.61789, 0.38211, .92724, 0.072534};
-    double ds = 0.0;
-    vector<double> Q = {1, .5};
+    //vector<double> xsec_scatter = {0,0,0,0};
+    //double ds = 0.0;
+    vector<double> Q = {1, 1, 1, 1, 1, 1, 1, 1};
 
     double Length = 1;
     double IC_homo = 0;
@@ -130,7 +132,6 @@ int main(void){
     ps.L = Length;
     ps.dt = dt;
     ps.dx = dx;
-    ps.ds = ds;
     ps.N_angles = N_angles;
     ps.N_cells = N_cells;
     ps.N_groups = N_groups;

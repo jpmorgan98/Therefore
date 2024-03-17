@@ -45,7 +45,6 @@ class problem_space{
 
         bool mms_bool;
         mms manSource; // source for the method of manufactured solution
-        double ds;
 
         std::vector<double> weights;
         std::vector<double> angles;

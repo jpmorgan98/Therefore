@@ -11,8 +11,8 @@ def group1cont(x,mu,t):
 def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
-N_angles = 24
-N_cells = 170
+N_angles = 2
+N_cells = 100
 N_groups = 2
 N_time = 1
 
@@ -55,9 +55,9 @@ for t in range(N_time):
     af_raw = af_raw[:,0]
 
     # import mms data
-    file2 = file_name_base2+str(t)+file_ext
-    mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
-    mms_raw = mms_raw[:,0]
+    #file2 = file_name_base2+str(t)+file_ext
+    #mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
+    #mms_raw = mms_raw[:,0]
 
     if (af_raw.size != SIZE_problem):
         print(">>>ERROR<<<")
@@ -141,6 +141,7 @@ plt.figure()
 
 #plt.plot(x, temp, '+', label='cont')
 plt.plot(x, sf_wp[0,0,:], label='g1 -- no source')
+plt.plot(x, sf_wp[0,1,:], label='g2 -- no source')
 #plt.plot(x[:,0], sf_wp[5,0,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[5,1,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[7,0,:], label='g1 -- no source')
