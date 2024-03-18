@@ -386,20 +386,21 @@ int main(){
     
     // problem definition
     // eventually from an input deck
-    double dx = .1;
-    double dt = 0.5;
-    vector<double> v = {1, 4};
-    vector<double> xsec_total = {1, 3.0};
-    vector<double> xsec_scatter = {0, 0};
-    double ds = 0.0;
-    vector<double> material_source = {1, 0, 0, 0}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
+    double dx = .01;
+    double dt = 1.0;
+    vector<double> v = {1, 1};
+    vector<double> xsec_total = {1.5454, 0.04568};
+    vector<double> xsec_scatter = {0.61789, 0.072534};
+    //vector<double> xsec_scatter = {0,0};
+    //double ds = 0.0;
+    vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 10; //10
+    int N_cells = 100; //10
     int N_angles = 2;
-    int N_time = 2;
+    int N_time = 1;
     int N_groups = 2;
 
     // 4 = N_subspace (2) * N_subtime (2)
@@ -425,7 +426,7 @@ int main(){
     ps.L = Length;
     ps.dt = dt;
     ps.dx = dx;
-    ps.ds = ds;
+    //ps.ds = ds;
     ps.N_angles = N_angles;
     ps.N_cells = N_cells;
     ps.N_groups = N_groups;
@@ -468,7 +469,8 @@ int main(){
         cellCon.v = v;
         cellCon.dt = dt;
         cellCon.material_source = material_source;
-        cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 1};
+        cellCon.xsec_g2g_scatter = vector<double> {0, .38211, .92747, 0};
+        //cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 0};
 
         //vector<double> temp (N_angles*N_groups*4, 1.0);
         //for (int p=0; p<temp.size(); ++p){temp[p] = Q[0];}
