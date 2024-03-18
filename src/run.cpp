@@ -20,6 +20,7 @@ class run{
 
 
         bool cycle_print = true;
+        bool save_output = true;
         
 
         int itter;          // iteration counter
@@ -284,15 +285,16 @@ class run{
                 b_gen_const_win_iter( b_const_cpu, aflux_previous, cells, ps );
                 b_const_gpu = b_const_cpu;
 
-                convergenceLoop( A, b_const_cpu, t );
+                //convergenceLoop( A, b_const_cpu, t );
 
                 ConvergenceLoopOptGPU( A, b_const_gpu, t );
 
-                check_close( b_const_cpu, b_const_gpu );
+                //check_close( b_const_cpu, b_const_gpu );
 
                 aflux_previous = b_const_gpu;
 
-                save_eos_data(t);
+                if ( save_output )
+                    save_eos_data(t);
 
             } // end of time step loop
         }
@@ -313,6 +315,7 @@ class run{
 
                 // b is also used up and has to be ressinged
                 std::vector<double> b = b_const;
+                //std::vector<double> b (ps.N_mat);
                 
 
                 //assing angular flux
@@ -321,6 +324,8 @@ class run{
                 // b has a constant and
                 // reminder: last refers to iteration, previous refers to time step
                 b_gen_var_win_iter( b, aflux_last, ps );
+                //b_gen(b, aflux_previous, aflux_last, cells, ps);
+
 
                 //Lapack solvers
                 //amdGPU_dgesv_strided_batched(A_copy, b, ps);
@@ -351,14 +356,19 @@ class run{
 
                 aflux_last = b;
                 
-                cycle_print_func(t);
+                if ( cycle_print )
+                    cycle_print_func( t );
                 
                 itter++;
 
                 error_n2 = error_n1;
                 error_n1 = error;
 
+                
+
             } // end convergence loop
+
+        //b_const = aflux_last;
         }
 
         void ConvergenceLoopOptGPU( std::vector<double> &hA, std::vector<double> &hb_const, int t){
@@ -390,7 +400,7 @@ class run{
             std::vector<double> herror (3);
             std::vector<int> probSpace {ps.N_cells, ps.N_groups, ps.N_angles};
 
-            print_vec_sd_int(probSpace);
+            //print_vec_sd_int(probSpace);
 
             // defininig pointers to memory on GPU
             double *dA, *db, *dangles, *dboundary, *daflux_last, *db_const;
@@ -459,7 +469,8 @@ class run{
                                 converged = false;
                 }
 
-                cycle_print_func(t);
+                if (cycle_print)
+                    cycle_print_func(t);
 
                 hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
                 aflux_last = hb;

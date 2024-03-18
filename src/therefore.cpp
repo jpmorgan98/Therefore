@@ -21,6 +21,9 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 const bool print_mats = false;
 const bool debug_print = false;
 const bool gpu = false;
+const bool cycle_print = false;
+const bool print_title_card = false;
+const bool save_output = false;
 
 
 
@@ -58,7 +61,7 @@ For CUDA GPU
             make
 
 For AMD GPU
-    on Lockhart (AMD MI200 devlopment machine)
+    on Lockhart (AMD MI250 devlopment machine)
         module load rocm
         cc main.cpp -isystem "/opt/rocm-5.5.1/include" -I/opt/rocm/include -lrocsolver -lrocblas -D__HIP_PLATFORM_AMD__
         hipcc -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack main.cpp
@@ -82,15 +85,18 @@ void eosPrint(ts_solutions state);
 
 // i space, m is angle, k is time, g is energy group
 
-int main(void){
+//int main(void){
+extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
+//int main(){
 
-    print_title();
+    if ( print_title_card )
+        print_title();
 
     using namespace std;
     
     // problem definition
     // eventually from an input deck
-    double dx = 01;
+    //double dx = .1;
     double dt = 1.0;
     vector<double> v = {1, 1};
     vector<double> xsec_total = {1.5454, 0.45468};
@@ -99,12 +105,13 @@ int main(void){
     //vector<double> xsec_scatter = {0,0,0,0};
     //double ds = 0.0;
     vector<double> Q = {1, 1, 1, 1, 1, 1, 1, 1};
+    //vector<double> Q = {1,0,0,0,0,0,0,0,0};
 
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 100; //10
-    int N_angles = 2;
+    int N_cells = int(1/dx); //10
+    //int N_angles = 24;
     int N_time = 1;
     int N_groups = 2;
 
@@ -258,6 +265,8 @@ int main(void){
     problem.ps = ps;
     problem.cells = cells;
     problem.IC = IC;
+    problem.cycle_print = cycle_print;
+    problem.save_output = save_output;
     //// mms coefficients
     //problem.manSource.A = 1.0;
     //problem.manSource.B = 1.0;
@@ -280,4 +289,5 @@ int main(void){
     //problem.publish_mms();
     
     return(0);
+}
 } // end of main
