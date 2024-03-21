@@ -21,7 +21,7 @@ void print_rm(std::vector<double> vec){
 
     for (int i=0; i<N; i++){
         for (int j=0; j<N; j++){
-            printf("%5.2f ", vec[i*N+j]) ;
+            printf("%5.5f, ", vec[i*N+j]) ;
         }
         printf("\n");
     }

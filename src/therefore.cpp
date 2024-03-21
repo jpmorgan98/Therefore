@@ -21,7 +21,7 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 const bool print_mats = false;
 const bool debug_print = false;
 const bool gpu = false;
-const bool cycle_print = false;
+const bool cycle_print = true;
 const bool print_title_card = false;
 const bool save_output = false;
 
@@ -98,7 +98,7 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     // eventually from an input deck
     //double dx = .1;
     double dt = 1.0;
-    vector<double> v = {1, 1};
+    vector<double> v = {1, .5};
     vector<double> xsec_total = {1.5454, 0.45468};
     //vector<double> xsec_total = {1, 1};
     vector<double> xsec_scatter = {0.61789, 0.38211, .92724, 0.072534};
@@ -148,7 +148,7 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     ps.angles = angles;
     ps.weights = weights;
     ps.initialize_from_previous = false;
-    ps.max_iteration = int(1e4);
+    ps.max_iteration = int(1);
     // 0 for vac 1 for reflecting 3 for mms
     ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle

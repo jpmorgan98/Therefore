@@ -2,6 +2,7 @@
 #include "builders.h"
 #include <hip/hip_runtime.h>
 #include "rocsolver.cpp"
+//#include <omp.h>
 
 // lapack function! To copmile requires <-Ipath/to/lapack/headers -llapack>
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
@@ -132,7 +133,7 @@ class run{
 
 
         void linear_solver(vector<double> &A_copy, vector<double> &b){
-            /* DO NOT CALL DEBUGING ONLY
+            /* DO j CALL DEBUGING ONLY
             Solves a single large dense matrix, in this case zeros and all
             */
 
@@ -285,11 +286,11 @@ class run{
                 b_gen_const_win_iter( b_const_cpu, aflux_previous, cells, ps );
                 b_const_gpu = b_const_cpu;
 
-                //convergenceLoop( A, b_const_cpu, t );
+                convergenceLoop( A, b_const_cpu, t );
 
-                ConvergenceLoopOptGPU( A, b_const_gpu, t );
+                //ConvergenceLoopOptGPU( A, b_const_gpu, t );
 
-                //check_close( b_const_cpu, b_const_gpu );
+                check_close( b_const_cpu, b_const_gpu );
 
                 aflux_previous = b_const_gpu;
 

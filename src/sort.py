@@ -11,12 +11,12 @@ def group1cont(x,mu,t):
 def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
-N_angles = 2
+N_angles = 24
 N_cells = 100
 N_groups = 2
 N_time = 1
 
-dt = 1.0
+dt = 0.1
 
 file_name_base = 'afluxUnsorted'
 file_name_base2 = 'mms_sol'
