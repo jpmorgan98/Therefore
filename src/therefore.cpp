@@ -86,8 +86,8 @@ void eosPrint(ts_solutions state);
 // i space, m is angle, k is time, g is energy group
 
 //int main(void){
-extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
-//int main(){
+//extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
+int main(){
 
     if ( print_title_card )
         print_title();
@@ -96,7 +96,7 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     
     // problem definition
     // eventually from an input deck
-    //double dx = .1;
+    double dx = .01;
     double dt = 1.0;
     vector<double> v = {1, .5};
     vector<double> xsec_total = {1.5454, 0.45468};
@@ -111,7 +111,7 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     double IC_homo = 0;
     
     int N_cells = int(1/dx); //10
-    //int N_angles = 24;
+    int N_angles = 48;
     int N_time = 1;
     int N_groups = 2;
 
@@ -148,7 +148,7 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     ps.angles = angles;
     ps.weights = weights;
     ps.initialize_from_previous = false;
-    ps.max_iteration = int(1);
+    ps.max_iteration = int(1e4);
     // 0 for vac 1 for reflecting 3 for mms
     ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle
@@ -280,7 +280,7 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     //problem.manSource.sigmaS1 = xsec_scatter[0];
     //problem.manSource.sigmaS2 = xsec_scatter[1];
     //problem.manSource.sigmaS1_2 = ps.ds;
-//
+    //
     //ps.manSource = problem.manSource;
 
     
@@ -289,5 +289,5 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     //problem.publish_mms();
     
     return(0);
-}
-} // end of main
+} //end of main
+//} // end of extern function

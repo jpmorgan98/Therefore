@@ -346,7 +346,7 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
         }
     }
 
-    print_rm(A_c);
+    //print_rm(A_c);
 }
 
 

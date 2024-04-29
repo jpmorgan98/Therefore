@@ -13,7 +13,7 @@ NP_DOUBLE = np.float64
 def compile():
     compCommand = []
     compCommand.append('module load rocm/6 lapack')
-    compCommand.append('hipcc -fPIC -shared -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -L/home/joamorga/miniconda3/lib -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
+    compCommand.append('hipcc -fPIC -shared -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -L/home/joamorga/miniconda3/lib -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
     #-fopenmp
     print('compiling therefore')
 
@@ -58,9 +58,10 @@ if (__name__ == '__main__'):
         runTime[i] = end - start
         print(runTime[i])
 
-    dir = 'runtime_results/'
-    file_name = dir + 'runtime_' + hardware_name
-    print(runTime)
-    np.savez(file_name, runtime=runTime, dx=dx, N_angles=24)
+    print("Completed")
+    #dir = 'runtime_results/'
+    #file_name = dir + 'runtime_' + hardware_name
+    #print(runTime)
+    #np.savez(file_name, runtime=runTime, dx=dx, N_angles=24)
 
     

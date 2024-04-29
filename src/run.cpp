@@ -4,6 +4,8 @@
 #include "rocsolver.cpp"
 //#include <omp.h>
 
+bool OPTIMIZED = false;
+
 // lapack function! To copmile requires <-Ipath/to/lapack/headers -llapack>
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
@@ -286,11 +288,11 @@ class run{
                 b_gen_const_win_iter( b_const_cpu, aflux_previous, cells, ps );
                 b_const_gpu = b_const_cpu;
 
-                convergenceLoop( A, b_const_cpu, t );
+                //convergenceLoop( A, b_const_cpu, t );
 
-                //ConvergenceLoopOptGPU( A, b_const_gpu, t );
+                ConvergenceLoopOptGPU( A, b_const_gpu, t );
 
-                check_close( b_const_cpu, b_const_gpu );
+                //check_close( b_const_cpu, b_const_gpu );
 
                 aflux_previous = b_const_gpu;
 
@@ -329,8 +331,8 @@ class run{
 
 
                 //Lapack solvers
-                //amdGPU_dgesv_strided_batched(A_copy, b, ps);
-                PBJlinear_solver( A_copy, b );
+                amdGPU_dgesv_strided_batched(A_copy, b, ps);
+                //PBJlinear_solver( A_copy, b );
 
                 //check_close(b, b_copy);
                 
@@ -436,10 +438,12 @@ class run{
             std::vector<double> hb_const_check(ps.N_mat);
             converged = true;
 
+            hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
+
             // on gpu!
             while (converged){
 
-                hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
+                
                 hipMemcpy(daflux_last, &hb[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
                 hipMemcpy(db, &hb_const[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
 
@@ -448,9 +452,27 @@ class run{
                 hipLaunchKernelGGL(GPUb_gen_var_win_iter, dim3(blockspergrid), dim3(threadsperblock), 0, 0, 
                                     db, daflux_last, dangles, dps );
                 hipDeviceSynchronize();
-
-                rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
-                hipDeviceSynchronize();
+                
+                //first iteration we solve for the LU decomp in each cell and solve with back subbing
+                // in subsequent iteration we just back substitute as A is already solved for
+                
+                
+                if ( OPTIMIZED ){
+                    //std::cout << "OPTIMIZED" << std::endl;
+                    if (itter == 0){
+                        rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
+                        hipDeviceSynchronize();
+                    } else {
+                        //enum rocblas_operation_none;
+                        rocsolver_dgetrs_strided_batched(handle, rocblas_operation_none, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, batch_count);
+                        hipDeviceSynchronize();
+                    } 
+                } else {
+                    //std::cout << "NOT OPTIMIZED" << std::endl;
+                    hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
+                    rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
+                    hipDeviceSynchronize();
+                }
 
                 // warning! daflux_last is in-out!
                 error = gpuL2norm(handle, daflux_last, db, ps.N_mat);
