@@ -68,7 +68,7 @@ class mms:
     
     def group2afCONT(self,mu,x,t):
         """the continuous angular flux function for group 2 """
-        return ( self.C * math.exp( -self.F*x*t ) + self.D*mu**2 ) 
+        return ( self.C * math.exp( -self.F*x*t ) + self.D*mu**2 )
 
     def group2afUNINT():
         return ( )

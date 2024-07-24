@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-#from mms import mms
+
 
 def group2cont(x, mu, t):
     return(pow(x,2)*t + mu)
@@ -12,14 +12,15 @@ def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
 N_angles = 2
-N_cells = 100
+N_cells = 10
 N_groups = 2
 N_time = 1
 
-dt = 1.0
+dt = 0.1
 
-file_name_base = 'sweep_afluxUnsorted'
+file_name_base = 'Sweep_afluxUnsorted'
 file_name_base2 = 'mms_sol'
+file_name_base3 = 'mms_source'
 file_ext = '.csv'
 
 [angles, weights] = np.polynomial.legendre.leggauss(N_angles)
@@ -44,6 +45,9 @@ assert (int(af_wp.size/N_time) == SIZE_problem)
 af_mms = np.zeros((N_time*2, N_groups, N_angles, 2*N_cells))
 sf_mms = np.zeros((N_time*2, N_groups, 2*N_cells))
 
+Qaf_mms = np.zeros((N_time*2, N_groups, N_angles, 2*N_cells))
+Qsf_mms = np.zeros((N_time*2, N_groups, 2*N_cells))
+
 af_mms_cont = np.zeros((N_time*2, N_groups, N_angles, 2*N_cells))
 sf_mms_cont = np.zeros((N_time*2, N_groups, 2*N_cells))
 
@@ -55,9 +59,14 @@ for t in range(N_time):
     af_raw = af_raw[:,0]
 
     # import mms data
-    #file2 = file_name_base2+str(t)+file_ext
-    #mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
-    #mms_raw = mms_raw[:,0]
+    file2 = file_name_base2+str(t)+file_ext
+    mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
+    mms_raw = mms_raw[:,0]
+    #print(mms_raw)
+
+    file3 = file_name_base3+str(t)+file_ext
+    mms_Q_raw = np.genfromtxt(file3, dtype=np.float64, delimiter=',', skip_header=2)
+    mms_Q_raw = mms_Q_raw[:,0]
 
     if (af_raw.size != SIZE_problem):
         print(">>>ERROR<<<")
@@ -81,7 +90,7 @@ for t in range(N_time):
                 sf_wp[t*2+1,g,2*i]   += weights[n] * af_raw[index_start+2]
                 sf_wp[t*2+1,g,2*i+1] += weights[n] * af_raw[index_start+3]
 
-                '''
+                
                 af_mms[t*2  ,g,n,2*i]   = mms_raw[index_start]
                 af_mms[t*2  ,g,n,2*i+1] = mms_raw[index_start+1]
                 af_mms[t*2+1,g,n,2*i]   = mms_raw[index_start+2]
@@ -92,6 +101,17 @@ for t in range(N_time):
                 sf_mms[t*2+1,g,2*i]   += weights[n] * mms_raw[index_start+2]
                 sf_mms[t*2+1,g,2*i+1] += weights[n] * mms_raw[index_start+3]
 
+                Qaf_mms[t*2  ,g,n,2*i]   = mms_Q_raw[index_start]
+                Qaf_mms[t*2  ,g,n,2*i+1] = mms_Q_raw[index_start+1]
+                Qaf_mms[t*2+1,g,n,2*i]   = mms_Q_raw[index_start+2]
+                Qaf_mms[t*2+1,g,n,2*i+1] = mms_Q_raw[index_start+3]
+
+                Qsf_mms[t*2  ,g,2*i]   += weights[n] * mms_Q_raw[index_start]
+                Qsf_mms[t*2  ,g,2*i+1] += weights[n] * mms_Q_raw[index_start+1]
+                Qsf_mms[t*2+1,g,2*i]   += weights[n] * mms_Q_raw[index_start+2]
+                Qsf_mms[t*2+1,g,2*i+1] += weights[n] * mms_Q_raw[index_start+3]
+
+                '''
                 mms_cont_raw = np.zeros(4)
                 if (g==0):
                     mms_cont_raw[0] = group1cont(x[i*2], angles[n], t*dt  )
@@ -114,6 +134,7 @@ for t in range(N_time):
                 sf_mms_cont[t*2  ,g,2*i+1] += weights[n] * mms_cont_raw[1]
                 sf_mms_cont[t*2+1,g,2*i]   += weights[n] * mms_cont_raw[2]
                 sf_mms_cont[t*2+1,g,2*i+1] += weights[n] * mms_cont_raw[3]
+                
 
 
 print(error(sf_wp[2,0,:], sf_mms[2,0,:]))
@@ -138,17 +159,44 @@ plt.figure()
 #plt.plot(x, af_mms[0,1, 1,:], 'r*', label='mms')
 #plt.plot(x, sf_wp[0,1,:], 'g', label='computed')
 
+#sf_mms_1 = np.zeros_like(x)
+#sf_mms_2 = np.zeros_like(x)
+#for i in range (x.size):
+#    for m in range(N_angles):
+#        sf_mms_1 += (x + t + angles[m]) * weights[m]
+#        sf_mms_2 += (x**2*t + angles[m]) * weights[m]
 
+plt.figure(1)
 #plt.plot(x, temp, '+', label='cont')
-plt.plot(x, sf_wp[0,0,:], label='g1 -- no source')
+plt.plot(x, af_wp[0,0,0,:], label='g1')
+plt.plot(x, af_wp[0,1,0,:], label='g2')
+plt.plot(x, af_mms[0,0,0,:], label='g1 mms')
+plt.plot(x, af_mms[0,1,0,:], label='g2 mms')
+plt.plot(x, Qaf_mms[0,0,0,:], label='g1 source')
+plt.plot(x, Qaf_mms[0,1,0,:], label='g2 source')
 #plt.plot(x[:,0], sf_wp[5,0,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[5,1,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[7,0,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[7,1,:], label='g1 -- no source')
 plt.xlabel('Distance')
 plt.ylabel('Sc Fl')
-plt.title('Single region -- trouble shoot time step=1')
+plt.title('MMS AF, ord1')
 plt.legend()
-plt.savefig('_soultion.png')
+plt.show()
 
-
+plt.figure(2)
+plt.plot(x, af_wp[0,0,1,:], label='g1')
+plt.plot(x, af_wp[0,1,1,:], label='g2')
+plt.plot(x, af_mms[0,0,1,:], label='g1 mms')
+plt.plot(x, af_mms[0,1,1,:], label='g2 mms')
+plt.plot(x, Qaf_mms[0,0,1,:], label='g1 source')
+plt.plot(x, Qaf_mms[0,1,1,:], label='g2 source')
+#plt.plot(x[:,0], sf_wp[5,0,:], label='g1 -- no source')
+#plt.plot(x[:,0], sf_wp[5,1,:], label='g1 -- no source')
+#plt.plot(x[:,0], sf_wp[7,0,:], label='g1 -- no source')
+#plt.plot(x[:,0], sf_wp[7,1,:], label='g1 -- no source')
+plt.xlabel('Distance')
+plt.ylabel('Af')
+plt.title('MMS AF, ord2')
+plt.legend()
+plt.show()

@@ -45,6 +45,7 @@ class problem_space{
         double material_source;
         double velocity;
         double L;
+        double t_init;
 
         bool mms_bool;
         mms manSource; // source for the method of manufactured solution
