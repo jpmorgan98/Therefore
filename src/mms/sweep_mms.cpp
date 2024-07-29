@@ -670,7 +670,7 @@ int main(){
     ps.angles = angles;
     ps.weights = weights;
     ps.initialize_from_previous = false;
-    ps.max_iteration = int(3);
+    ps.max_iteration = int(4);
     // 0 for vac 1 for reflecting 3 for mms
     ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle
