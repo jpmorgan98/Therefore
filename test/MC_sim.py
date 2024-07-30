@@ -14,7 +14,6 @@ lib = h5py.File("c5g7_xs.h5", "r")
 
 # Setter
 def set_mat(mat):
-    print(mat["speed"])
     
     return mcdc.material(
         capture=mat["capture"][:],
@@ -56,20 +55,19 @@ s8 = mcdc.surface("plane-z", z=13, bc="vacuum")
 mcdc.cell([+s1, -s2], mat_mod)
 mcdc.cell([+s2, -s3], mat_uo2)
 mcdc.cell([+s3, -s4], mat_mod)
-mcdc.cell([+s3, -s4], mat_cr)
-mcdc.cell([+s3, -s4], mat_mod)
-mcdc.cell([+s3, -s4], mat_uo2)
-mcdc.cell([+s3, -s4], mat_mod)
+mcdc.cell([+s4, -s5], mat_cr)
+mcdc.cell([+s5, -s6], mat_mod)
+mcdc.cell([+s6, -s7], mat_uo2)
+mcdc.cell([+s7, -s8], mat_mod)
 
 
-energy = np.zeros(7)
+energy = np.ones(7)
 energy[0] = 1.0
 
+mcdc.source(z=[2.5, 3.5], time=[0.0, 1.0], isotropic=True, energy=energy)
+mcdc.source(z=[9.5, 10.5], time=[0.0, 1.0], isotropic=True, energy=energy)
 
-mcdc.source(z=[2.5, 3.5], time=[0.0, 10.0], isotropic=True, energy=energy)
-mcdc.source(z=[9.5, 10.5], time=[0.0, 10.0], isotropic=True, energy=energy)
-
-mcdc.tally(scores=["flux"], t=np.logspace(0,10, 20), z=np.linspace(0.0, 10, 61), g="all")
+mcdc.tally(scores=["flux"], t=np.logspace(0,2, 20), z=np.linspace(0.0, 10, 61), g="all")
 
 mcdc.setting(N_particle=1e6)
 mcdc.run()
