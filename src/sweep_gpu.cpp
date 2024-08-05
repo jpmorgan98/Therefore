@@ -3,8 +3,8 @@
 #include "util.h" // remove when putting in larger file
 #include "base_mats.h"
 #include "legendre.h"
-#include <hip/hip_runtime.h>
-#include "rocsolver.cpp"
+//#include <hip/hip_runtime.h>
+//#include "rocsolver.cpp"
 
 //compile commands 
 // lockhartt cc sweep.cpp -std=c++20
@@ -24,7 +24,42 @@ void Axeb( std::vector<double> &A, std::vector<double> &b){
 }
 
 
-void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space ps){
+void sb_Axeb(vector<double> &A_sp_cm, vector<double> &b, int N_groups, int N_angles){
+    /*breif: Solves individual dense cell matrices in parallel on cpu
+    requires -fopenmp to compile.
+
+    A and b store all matrices in col major in a single std:vector as
+    offsets from one another*/
+    int info;
+
+    // parallelized over the number of cells
+    //#pragma omp parallel for
+    for (int i=0; i<N_groups*N_angles; ++i){
+
+        // lapack variables for a single cell (col major!)
+        int nrhs = 1; // one column in b
+        int lda = 4; // leading A dim for col major
+        int ldb_col = 4; // leading b dim for col major
+        std::vector<int> ipiv_par(4); // pivot vector
+        int Npbj = 4; // size of problem
+
+        // solve Ax=b in a cell
+        dgesv_( &Npbj, &nrhs, &A_sp_cm[i*16], &lda, &ipiv_par[0], &b[i*4], &ldb_col, &info );
+    }
+    
+    
+    if( info > 0 ) {
+        printf( "\n>>>PBJ LINALG ERROR<<<\n" );
+        printf( "The diagonal element of the triangular factor of A,\n" );
+        printf( "U(%i,%i) is zero, so that A is singular;\n", info, info );
+        printf( "the solution could not be computed.\n" );
+        exit( 1 );
+    }
+}
+
+
+
+void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space ps){
     for (int j=0; j<ps.N_angles; ++j){
         for (int g=0; g<ps.N_groups; ++g){
 
@@ -45,13 +80,8 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
 
                     if ( i == ps.N_cells - 1 ){
 
-                        std::vector<double> af_bound1 = AF_cellintegrated_timeedge(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx);
-                        std::vector<double> af_bound2 = AF_cellintegrated_timeaverage(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx);
-
                         af_RB    = 0; // BCr[angle]
                         af_hn_RB = 0; // BCr[angle]
-
-
 
                     } else {
                         outofbounds_check(((i+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 0, af_last);
@@ -65,6 +95,9 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
                     std::vector<double> A = row2colSq(A_rm);
                     //  c_neg(cell cell, int group, double mu, int angle, std::vector<double> sf, int offset, double af_hl_L, double af_hl_R, double af_RB, double af_hn_RB){
                     std::vector<double> c = c_neg(cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_RB, af_hn_RB);
+                    
+                    //print_cm(A);
+                    //print_vec_sd(c);
 
                     Axeb(A, c);
 
@@ -121,7 +154,160 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
 }
 
 
+void build_A_si(int i, int i_n, std::vector<double> &A_cell, std::vector<cell> &cells, problem_space &ps){
+    // outputs a set of N_angle*N_group strided batched 4*4 matrices for a given cell
 
+    for ( int g=0; g<ps.N_groups; ++g){
+        for (int j=0; j<ps.N_angles; ++j){
+            std::vector<double> A_c_g_a;
+            if (ps.angles[j] > 0){
+                std::vector<double> temp = A_pos_rm(cells[i], ps.angles[j], g);
+                 A_c_g_a = row2colSq(temp);
+            } else { // negative sweep
+                std::vector<double> temp = A_neg_rm(cells[i_n], ps.angles[j], g);
+                A_c_g_a = row2colSq(temp);
+            }
+
+            int index_start = 4*4*ps.N_angles*g + 16*j;
+
+            for (int r=0; r<16; ++r){
+                A_cell[index_start+r] = A_c_g_a[r];
+            }
+
+            // push it into A_cell
+            //for (int r=0; r<4; ++r){
+            //    for (int c=0; c<4; ++c){
+            //        //awfully confusing I know
+            //        int id_acell  = 4*r + c + (g*4*4*ps.N_angles + j*4);
+            //        int id_ancell = 4*r + c;
+            //        A_cell[id_acell] = A_c_g_a[id_ancell]; 
+            //    }
+            //}
+        }
+    }
+}
+
+
+
+void build_b_si(int i, int i_n, std::vector<double> &b, std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
+    for ( int g=0; g<ps.N_groups; ++g ){
+        for ( int j=0; j<ps.N_angles; ++j ){
+
+            if (ps.angles[j] < 0){ // negative sweep
+                int helper =  (i_n*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+                int index_sf = (i_n*4) + (g*4*ps.N_cells);
+                int local_helper = (g*4*ps.N_angles) + 4*j;
+
+                double af_hl_L = af_prev[helper + 2];
+                double af_hl_R = af_prev[helper + 3];
+                double af_RB;
+                double af_hn_RB;
+
+                if ( i_n == ps.N_cells - 1 ){
+
+                    af_RB    = 0; // BCr[angle]
+                    af_hn_RB = 0; // BCr[angle]
+
+                } else {
+                    outofbounds_check(((i_n+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 0, af_last);
+                    outofbounds_check(((i_n+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 2, af_last);
+
+                    af_RB    = af_last[((i_n+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 0];
+                    af_hn_RB = af_last[((i_n+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 2];
+                }
+
+                std::vector<double> c = c_neg(cells[i_n], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_RB, af_hn_RB);
+
+                b[local_helper+0] = c[0];
+                b[local_helper+1] = c[1];
+                b[local_helper+2] = c[2];
+                b[local_helper+3] = c[3];
+
+            } else if (ps.angles[j] > 0) { // positive sweep
+                int helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+                int index_sf = (i*4) + (g*4*ps.N_cells);
+                int local_helper = (g*4*ps.N_angles) + 4*j;
+
+                double af_hl_L = af_prev[helper + 2];
+                double af_hl_R = af_prev[helper + 3];
+                double af_LB;
+                double af_hn_LB;
+
+                if ( i == 0 ){
+
+                    af_LB    = 0; // BCr[angle]
+                    af_hn_LB = 0; // BCr[angle]
+
+                } else {
+                    outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 1, af_last );
+                    outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 3, af_last );
+
+                    af_LB     = af_last[((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 1];
+                    af_hn_LB  = af_last[((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 3];
+                }
+
+                std::vector<double> c = c_pos(cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_LB, af_hn_LB);
+
+                b[local_helper+0] = c[0];
+                b[local_helper+1] = c[1];
+                b[local_helper+2] = c[2];
+                b[local_helper+3] = c[3];
+            }
+        }
+    }
+}
+
+void resort (int i, int i_n, std::vector<double> &af_last, std::vector<double> b, std::vector<cell> &cells, problem_space &ps){
+    for ( int g=0; g<ps.N_groups; ++g ){
+        for ( int m=0; m<ps.N_angles; ++m ){
+
+            int local_helper = (g*4*ps.N_angles) + 4*m;
+            int helper;
+
+            if (ps.angles[m] < 0){ // negative sweep
+                helper =  (i_n*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m);
+            } else if (ps.angles[m] > 0) {
+                helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m);
+            }
+
+            af_last[helper + 0] = b[local_helper + 0];
+            af_last[helper + 1] = b[local_helper + 1];
+            af_last[helper + 2] = b[local_helper + 2];
+            af_last[helper + 3] = b[local_helper + 3];
+        }
+    }
+}
+
+//af_new, af_previous, sf_new, cells, ps
+
+void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
+    //int size = 4 * ps.N_groups * ps.N_angles; // N_g*N_a mat
+
+    std::vector<double> A_cell (16 * ps.N_groups * ps.N_angles);
+    std::vector<double> b_cell (4 * ps.N_groups * ps.N_angles);
+
+    for (int i=0; i<ps.N_cells; ++i){
+        int i_n = ps.N_cells-1 - i; // index for the negative sweeps
+        
+        //build A for Cell for all group and angle within cell
+        build_A_si( i, i_n, A_cell, cells, ps );
+
+        //print_cm_sp(A_cell, 0, 4);
+
+        //build b for Cell all group and angle within cell
+        build_b_si( i, i_n, b_cell, af_last, af_prev, sf, cells, ps );
+
+        //print_vec_sd(b_cell);
+
+        //solve for x in Ax=b
+        sb_Axeb(A_cell, b_cell, ps.N_groups, ps.N_angles);
+
+        //resort
+        resort( i, i_n, af_last, b_cell, cells, ps );
+    }
+}
+
+/*
 void sweep_gpu(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<double> A, std::vector<cell> &cells, problem_space ps){
 
     // perameters
@@ -228,6 +414,8 @@ void sweep_gpu(std::vector<double> &af_last, std::vector<double> &af_prev, std::
 
     }
 }
+
+*/
 
 
 void quadrature(std::vector<double> &angles, std::vector<double> &weights){
@@ -353,6 +541,8 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
 
     computeSF( af_previous, sf_new, ps );
 
+    std::vector<double> af_2(af_new.size());
+
     //build_A
 
     while (converged){
@@ -360,7 +550,15 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
         // communicate energy!
         compute_g2g( cells, sf_new, ps );
 
-        sweep( af_new, af_previous, sf_new, cells, ps );
+        af_2 = af_new;
+
+        sweep_normal( af_new, af_previous, sf_new, cells, ps );
+        sweep_batched( af_2, af_previous, sf_new, cells, ps );
+
+        //print_vec_sd(af_new);
+        //print_vec_sd(af_2);
+
+        check_close(af_new, af_2);
 
         // compute scalar fluxes
         computeSF( af_new, sf_new, ps );
@@ -515,19 +713,19 @@ int main(){
     
     // problem definition
     // eventually from an input deck
-    double dx = .01;
+    double dx = .25;
     double dt = 1.0;
     vector<double> v = {1, 1};
     vector<double> xsec_total = {1.5454, 0.04568};
     vector<double> xsec_scatter = {0.61789, 0.072534};
     //vector<double> xsec_scatter = {0,0};
     //double ds = 0.0;
-    //vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
+    vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 100; //10
+    int N_cells = 4; //10
     int N_angles = 2;
     int N_time = 1;
     int N_groups = 2;
@@ -580,6 +778,8 @@ int main(){
 
     vector<cell> cells;
 
+    //material_source
+
     int region_id = 0;
 
     for (int i=0; i<N_cells; i++){
@@ -621,4 +821,3 @@ int main(){
 
     return(1);
 }
-

@@ -62,7 +62,6 @@ mcdc.cell([+s7, -s8], mat_mod)
 
 
 energy = np.ones(7)
-energy[0] = 1.0
 
 mcdc.source(z=[2.5, 3.5], time=[0.0, 1.0], isotropic=True, energy=energy)
 mcdc.source(z=[9.5, 10.5], time=[0.0, 1.0], isotropic=True, energy=energy)
