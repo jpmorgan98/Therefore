@@ -3,13 +3,13 @@
 #include "util.h" // remove when putting in larger file
 #include "base_mats.h"
 #include "legendre.h"
-//#include <hip/hip_runtime.h>
-//#include "rocsolver.cpp"
+#include <hip/hip_runtime.h>
+#include "rocsolver.cpp"
 
 //compile commands 
 // lockhartt cc sweep.cpp -std=c++20
 // g++ -g -L -llapack
-
+// 
 
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
@@ -57,6 +57,58 @@ void sb_Axeb(vector<double> &A_sp_cm, vector<double> &b, int N_groups, int N_ang
     }
 }
 
+
+void gpu_sb_Axeb(vector<double> &A_sp_cm, vector<double> &b, int N_groups, int N_angles){
+
+    rocblas_int N = 4;           // rows and cols in each household problem
+    rocblas_int lda = 4;         // leading dimension of A in each household problem
+    rocblas_int ldb = 4;         // leading dimension of B in each household problem
+    rocblas_int nrhs = 1;                         // number of nrhs in each household problem
+    rocblas_stride strideA = 16;  // stride from start of one matrix to the next (household to the next)
+    rocblas_stride strideB = 4;  // stride from start of one rhs to the next
+    rocblas_stride strideP = 4;  // stride from start of one pivot to the next
+    rocblas_int batch_count = N_angles * N_groups;         // number of matricies (in this case number of cells)
+
+    rocblas_handle handle;
+    rocblas_create_handle(&handle);
+
+    // when profiling the funtion 
+    // preload rocBLAS GEMM kernels (optional)
+    // rocblas_initialize();
+
+    // defininig pointers to memory on GPU
+    double *dA, *db;
+    rocblas_int *ipiv, *dinfo;
+
+    // double alloaction of problem
+    hipMalloc(&dA, sizeof(double)*strideA*batch_count);         // allocates memory for strided matrix container
+    hipMalloc(&db, sizeof(double)*strideB*batch_count);         // allocates memory for strided rhs container
+
+    // integer allocation
+    hipMalloc(&ipiv, sizeof(rocblas_int)*strideB*batch_count);  // allocates memory for integer pivot vector in GPU
+    hipMalloc(&dinfo, sizeof(rocblas_int)*batch_count);
+
+    //int threadsperblock = 256;
+    //int blockspergrid = (ps.N_mat + (threadsperblock - 1)) / threadsperblock;
+
+    //std::vector<double> hb(ps.N_mat);
+    //std::vector<double> hb_const_check(ps.N_mat);
+
+    hipMemcpy(dA, &A_sp_cm[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
+    hipMemcpy(db, &b[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
+
+    rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
+    //hipDeviceSynchronize();
+
+    hipMemcpy(&b[0], db, sizeof(double)*strideB*batch_count, hipMemcpyDeviceToHost);
+
+    hipFree(ipiv);
+    hipFree(dinfo);
+    hipFree(dA);
+    hipFree(db);
+    rocblas_destroy_handle(handle);
+    //solve on gpu
+}
 
 
 void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space ps){
@@ -280,6 +332,7 @@ void resort (int i, int i_n, std::vector<double> &af_last, std::vector<double> b
 
 //af_new, af_previous, sf_new, cells, ps
 
+
 void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
     //int size = 4 * ps.N_groups * ps.N_angles; // N_g*N_a mat
 
@@ -300,7 +353,8 @@ void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, s
         //print_vec_sd(b_cell);
 
         //solve for x in Ax=b
-        sb_Axeb(A_cell, b_cell, ps.N_groups, ps.N_angles);
+        gpu_sb_Axeb(A_cell, b_cell, ps.N_groups, ps.N_angles);
+        //sb_Axeb(A_cell, b_cell, ps.N_groups, ps.N_angles);
 
         //resort
         resort( i, i_n, af_last, b_cell, cells, ps );
@@ -713,7 +767,7 @@ int main(){
     
     // problem definition
     // eventually from an input deck
-    double dx = .25;
+    double dx = .01;
     double dt = 1.0;
     vector<double> v = {1, 1};
     vector<double> xsec_total = {1.5454, 0.04568};
@@ -725,7 +779,7 @@ int main(){
     double Length = 1;
     double IC_homo = 0;
     
-    int N_cells = 4; //10
+    int N_cells = 100; //10
     int N_angles = 2;
     int N_time = 1;
     int N_groups = 2;
