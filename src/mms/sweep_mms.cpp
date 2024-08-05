@@ -1,12 +1,15 @@
 #include <iostream>
 #include <vector>
-#include "util.h" // remove when putting in larger file
-#include "base_mats.h"
-#include "legendre.h"
+#include "../util.h" // remove when putting in larger file
+#include "../base_mats.h"
+#include "../legendre.h"
+
+#include "mms2.h"
 
 //compile commands 
 // lockhartt cc sweep.cpp -std=c++20
 // g++ -g -L -llapack
+// my mac: g++-14 -g -std=c++20 -llapack sweep_mms.cpp
 
 
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
@@ -42,14 +45,17 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
                     double af_hn_RB;
 
                     if ( i == ps.N_cells - 1 ){
-
-                        std::vector<double> af_bound1 = AF_cellintegrated_timeedge(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx);
-                        std::vector<double> af_bound2 = AF_cellintegrated_timeaverage(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx);
-
-                        af_RB    = 0; // BCr[angle]
-                        af_hn_RB = 0; // BCr[angle]
-
-
+                        //std::cout << "BC right" << std::endl;
+                        std::vector<double> temp;
+                        if (g==0){
+                            temp = AF_g1(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx);
+                        } else if(g==1) {
+                            temp = AF_g2(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx);
+                        } else {
+                            std::cout << "MMS is only 2 group (negative sweep bc)" << std::endl;
+                        }
+                        af_RB = temp[0];
+                        af_hn_RB = temp[2]; // BCr[angle]
 
                     } else {
                         outofbounds_check(((i+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 0, af_last);
@@ -65,6 +71,8 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
                     std::vector<double> c = c_neg(cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_RB, af_hn_RB);
 
                     Axeb(A, c);
+
+                    //print_cm(c);
 
                     af_last[helper+0] = c[0];
                     af_last[helper+1] = c[1];
@@ -87,8 +95,18 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
                     double af_hn_LB;
 
                     if (i == 0){ //LHS boundary condition
-                        af_LB     = 0;//ps.boundary_condition[];
-                        af_hn_LB  = 0;//ps.boundary_condition[];
+                        std::vector<double> temp;
+                        if (g==0){
+                            temp = AF_g1(ps.angles[j], ps.time_val, ps.dt, cells[i].x-cells[i].dx, cells[i].dx);
+                        } else if(g==1) {
+                            temp = AF_g2(ps.angles[j], ps.time_val, ps.dt, cells[i].x-cells[i].dx, cells[i].dx);
+                            //print_vec_sd(temp);
+                        } else {
+                            std::cout << "MMS is only 2 group (negative sweep bc)" << std::endl;
+                        }
+                        af_LB = temp[1];
+                        af_hn_LB = temp[3];
+
                     } else {
                         outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 1, af_last );
                         outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 3, af_last );
@@ -104,6 +122,8 @@ void sweep(std::vector<double> &af_last, std::vector<double> &af_prev, std::vect
                     //std::cout << "c" << std::endl;
                     //print_vec_sd( c );
                     Axeb(A, c);
+
+                    //print_vec_sd(c);
 
                     //std::cout << "x" << std::endl;
                     //print_vec_sd( c );
@@ -181,10 +201,10 @@ void compute_g2g(std::vector<cell> &cells, std::vector<double> &sf, problem_spac
             outofbounds_check(2*g+0, cells[c].material_source);
             outofbounds_check(2*g+1, cells[c].material_source);
 
-            cells[c].Q[4*g+0] = cells[c].material_source[2*g+0];
-            cells[c].Q[4*g+1] = cells[c].material_source[2*g+0];
-            cells[c].Q[4*g+2] = cells[c].material_source[2*g+1];
-            cells[c].Q[4*g+3] = cells[c].material_source[2*g+1];
+            cells[c].Q[4*g+0] = cells[c].material_source[4*g+0];
+            cells[c].Q[4*g+1] = cells[c].material_source[4*g+1];
+            cells[c].Q[4*g+2] = cells[c].material_source[4*g+2];
+            cells[c].Q[4*g+3] = cells[c].material_source[4*g+3];
         }
         
     }
@@ -248,6 +268,8 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
         
         // sweep
         sweep( af_new, af_previous, sf_new, cells, ps );
+
+        print_vec_sd(af_new);
 
         // compute scalar fluxes
         computeSF( af_new, sf_new, ps );
@@ -354,13 +376,202 @@ void init_Q(std::vector<cell> &cells, problem_space &ps){
     }
 }
 
+void setMMSsourece(std::vector<cell> &cells, problem_space &ps, double t){
+
+    for (int j=0; j<ps.N_cells; ++j){
+        for (int g=0; g<ps.N_groups; ++g){
+        for (int m=0; m<ps.N_angles; ++m){
+
+            double Sigma_S1  = cells[j].xsec_g2g_scatter[0];
+            double Sigma_S2  = cells[j].xsec_g2g_scatter[3];
+            double Sigma_S12 = cells[j].xsec_g2g_scatter[2];
+            double Sigma_S21 = cells[j].xsec_g2g_scatter[1];
+            
+            std::vector<double> temp;
+
+            if ( g == 0 ){
+                temp = Q1(cells[j].v[0], cells[j].v[1], cells[j].xsec_total[0], cells[j].xsec_total[1], ps.angles[m], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[j].x, cells[j].dx, t, ps.dt );
+            } else if ( g == 1) {
+                temp = Q2(cells[j].v[0], cells[j].v[1], cells[j].xsec_total[0], cells[j].xsec_total[0], ps.angles[m], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[j].x, cells[j].dx, t, ps.dt);
+            } else {
+                std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl;
+            }
+
+            //group 1
+            cells[j].material_source[0] += temp[0] * ps.weights[m];
+            cells[j].material_source[1] += temp[1] * ps.weights[m];
+            cells[j].material_source[2] += temp[2] * ps.weights[m];
+            cells[j].material_source[3] += temp[3] * ps.weights[m];
+        }
+        }
+    }
+}
+
+void MMSInitialCond(std::vector<double> &af, std::vector<cell> &cells, problem_space &ps){
+
+    for (int j=0; j<ps.N_cells; ++j){
+        for (int g=0; g<2; ++g){
+        for (int m=0; m<ps.N_angles; ++m){
+
+            int helper = (j*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m);
+            //group 1
+
+            std::vector<double> temp;
+
+            if ( g == 0 ){
+                temp = AF_g1( ps.angles[j], 0, ps.dt, cells[j].x, cells[j].dx );
+            } else if ( g == 1) {
+                temp = AF_g2( ps.angles[j], 0, ps.dt, cells[j].x, cells[j].dx );
+            } else{
+                std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl;
+            }
+
+            af[helper+0] = temp[0];
+            af[helper+1] = temp[1];
+            af[helper+2] = temp[2];
+            af[helper+3] = temp[3];
+
+        }
+        }
+    }
+
+}
+
+void MMSFullSol ( std::vector<cell> &cells, problem_space &ps ){
+
+    std::vector<double> mms_temp(ps.N_mat);
+    std::vector<double> temp(4);
+    int index_start;
+
+    double time_val = ps.t_init;
+
+    //double mu, double t_k, double Deltat, double x_j, double Deltax
+
+    for (int tp=0; tp<ps.N_time; tp++){
+        for (int ip=0; ip<ps.N_cells; ip++){
+            for (int gp=0; gp<2; gp++){
+            //for (int gp=0; gp<ps.N_groups; gp++){ //manual override for mms 
+                for (int jp=0; jp<ps.N_angles; jp++){
+                    
+
+                    if ( gp == 0 ){
+                        temp = AF_g1( ps.angles[jp], time_val, ps.dt, cells[ip].x, cells[ip].dx );
+                    } else if ( gp == 1) {
+                        temp = AF_g2( ps.angles[jp], time_val, ps.dt, cells[ip].x, cells[ip].dx );
+                    } else{
+                        std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl;
+                    }
+                    index_start = (ip*(ps.SIZE_cellBlocks) + gp*(ps.SIZE_groupBlocks) + 4*jp);
+                    mms_temp[index_start] = temp[0];
+                    mms_temp[index_start+1] = temp[1];
+                    mms_temp[index_start+2] = temp[2];
+                    mms_temp[index_start+3] = temp[3];
+                }
+            }
+        }
+
+
+        
+        string ext = ".csv";
+        string file_name = "mms_sol";
+        string dt = to_string(tp);
+
+        file_name = file_name + dt + ext;
+
+        std::ofstream output(file_name);
+        output << "TIME STEP: " << tp << "Unsorted solution vector for mms" << endl;
+        output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
+        for (int i=0; i<mms_temp.size(); i++){
+            output << mms_temp[i] << "," << endl;
+        }
+
+        time_val += ps.dt;
+
+    
+    }
+
+    cout << "time integrated mms solutions published " << endl;
+}
+
+
+void MMSFullSource ( std::vector<cell> &cells, problem_space &ps ){
+
+    std::vector<double> mms_temp(ps.N_mat);
+    std::vector<double> temp(4);
+    int index_start;
+
+    double time_val = ps.t_init;
+
+    //double mu, double t_k, double Deltat, double x_j, double Deltax
+
+    for (int tp=0; tp<ps.N_time; tp++){
+        for (int ip=0; ip<ps.N_cells; ip++){
+            for (int gp=0; gp<2; gp++){
+            //for (int gp=0; gp<ps.N_groups; gp++){ //manual override for mms 
+                for (int jp=0; jp<ps.N_angles; jp++){
+                    double Sigma_S1  = cells[ip].xsec_g2g_scatter[0];
+                    double Sigma_S2  = cells[ip].xsec_g2g_scatter[3];
+                    double Sigma_S12 = cells[ip].xsec_g2g_scatter[2];
+                    double Sigma_S21 = cells[ip].xsec_g2g_scatter[1];
+
+                    if ( gp == 0 ){
+                        temp =  Q1(cells[ip].v[0], cells[ip].v[1], cells[ip].xsec_total[0], cells[ip].xsec_total[1], ps.angles[jp], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[ip].x, cells[ip].dx, tp, ps.dt );
+                    } else if ( gp == 1) {
+                        temp =  Q2(cells[ip].v[0], cells[ip].v[1], cells[ip].xsec_total[0], cells[ip].xsec_total[1], ps.angles[jp], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[ip].x, cells[ip].dx, tp, ps.dt );
+                    } else{
+                        std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl;
+                    }
+                    index_start = (ip*(ps.SIZE_cellBlocks) + gp*(ps.SIZE_groupBlocks) + 4*jp);
+                    mms_temp[index_start] = temp[0];
+                    mms_temp[index_start+1] = temp[1];
+                    mms_temp[index_start+2] = temp[2];
+                    mms_temp[index_start+3] = temp[3];
+                }
+            }
+        }
+
+
+        
+        string ext = ".csv";
+        string file_name = "mms_source";
+        string dt = to_string(tp);
+
+        file_name = file_name + dt + ext;
+
+        std::ofstream output(file_name);
+        output << "TIME STEP: " << tp << "Unsorted solution vector for mms" << endl;
+        output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
+        for (int i=0; i<mms_temp.size(); i++){
+            output << mms_temp[i] << "," << endl;
+        }
+
+        time_val += ps.dt;
+
+    
+    }
+
+    cout << "time integrated mms solutions published " << endl;
+}
+
+
+
 void timeLoop(std::vector<double> af_previous, std::vector<cell> &cells, problem_space &ps){
 
     std::vector<double> af_solution( ps.N_mat );
 
+    MMSInitialCond(af_solution, cells, ps);
+
+    MMSFullSol( cells, ps );
+    MMSFullSource( cells, ps );
+
     //check_g2g(cells, ps);
 
+    //ps.time_val = 0;
+
     for (int t=0; t<ps.N_time; ++t){
+
+        // set mms if needed
+        setMMSsourece(cells, ps, t);
 
         // run convergence loop
         convergenceLoop(af_solution,  af_previous, cells, ps);
@@ -390,8 +601,12 @@ void timeLoop(std::vector<double> af_previous, std::vector<cell> &cells, problem
 
         // new previous info
         af_previous = af_solution;
+
+        ps.time_val += ps.dt;
     }
 }
+
+
 
 
 
@@ -402,19 +617,20 @@ int main(){
     
     // problem definition
     // eventually from an input deck
-    double dx = .01;
-    double dt = 1.0;
+    double dx = .1;
+    double dt = 0.1;
+    double t_init = 0.25;
     vector<double> v = {1, 1};
     vector<double> xsec_total = {1.5454, 0.04568};
-    vector<double> xsec_scatter = {0.61789, 0.072534};
+    //vector<double> xsec_scatter = {0.61789, 0.072534};
     //vector<double> xsec_scatter = {0,0};
     //double ds = 0.0;
-    //vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
+    vector<double> material_source = {0,0,0,0,0,0,0,0}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
-    double Length = 1;
+    double Length = .4;
     double IC_homo = 0;
     
-    int N_cells = 100; //10
+    int N_cells = 4; //10
     int N_angles = 2;
     int N_time = 1;
     int N_groups = 2;
@@ -442,6 +658,8 @@ int main(){
     ps.L = Length;
     ps.dt = dt;
     ps.dx = dx;
+    ps.time_val = t_init;
+    ps.t_init = t_init;
     //ps.ds = ds;
     ps.N_angles = N_angles;
     ps.N_cells = N_cells;
@@ -452,7 +670,7 @@ int main(){
     ps.angles = angles;
     ps.weights = weights;
     ps.initialize_from_previous = false;
-    ps.max_iteration = int(1e3);
+    ps.max_iteration = int(4);
     // 0 for vac 1 for reflecting 3 for mms
     ps.boundary_conditions = {0,0};
     // size of the cell blocks in all groups and angle
@@ -479,13 +697,13 @@ int main(){
         else
             cellCon.x_left = cells[cells.size()-1].x_left+cells[cells.size()-1].dx;
         
-        cellCon.xsec_scatter = vector<double> {xsec_scatter[0], xsec_scatter[1]};
+        //cellCon.xsec_scatter = vector<double> {xsec_scatter[0], xsec_scatter[1]};
         cellCon.xsec_total = vector<double> {xsec_total[0], xsec_total[1]};
         cellCon.dx = dx;
         cellCon.v = v;
         cellCon.dt = dt;
         cellCon.material_source = material_source;
-        cellCon.xsec_g2g_scatter = vector<double> {0, .38211, .92747, 0};
+        cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 0};
         //cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 0};
 
         //vector<double> temp (N_angles*N_groups*4, 1.0);
