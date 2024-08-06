@@ -1,4 +1,4 @@
-#include "mms.h"
+//#include "mms.h"
 using namespace std;
 
 
@@ -10,16 +10,19 @@ class cell{
         double x_left;
         double x;
         double x_right;
-        std::vector<double> xsec_scatter;
-        std::vector<double> xsec_total;
-        std::vector<double> v;
-
-        // Q stores non-homogenous terms in rm-form of dims [4 x N_groups x N_angles] where within a group
+        std::vector<double> xsec_scatter; // the within group scattering cross section
+        std::vector<double> xsec_total; // the total cross section of
+        std::vector<double> v; // the velocity of the particles in energy
+        std::vector<double> xsec_g2g_scatter; // the group to group scattering terms in each cell
+        std::vector<double> material_source; // the actual material source
+        
+        std::vector<double> Q;
+        // Q stores non-homogenous terms in rm-form of dims [4 x N_groups] for normal problems
+        // or for MMS: [4 x N_groups x N_angles] where within a group
             // 0   left half cell space integrated, time averaged
             // 1   right half cell space integrated, time averaged
             // 2   left half cell space integrated, time edge
-            // 2   right half cell space integrated, time edge
-        std::vector<double> Q;
+            // 3   right half cell space integrated, time edge
 
         double dx;
         double dt;
@@ -42,9 +45,7 @@ class problem_space{
         double material_source;
         double velocity;
         double L;
-
-        bool mms_bool;
-        mms manSource; // source for the method of manufactured solution
+        double t_init;
 
         std::vector<double> weights;
         std::vector<double> angles;
@@ -61,6 +62,7 @@ class problem_space{
         int ELEM_cellBlocks;
         int SIZE_groupBlocks;
         int SIZE_angleBlocks;
+        int ELEM_sf;
 
         vector<int> boundary_conditions = {0,0};
         vector<double> af_left_bound;
@@ -125,8 +127,6 @@ class problem_space{
                 return(0.0);
             } else if (boundary_conditions[side] == 1){ //reflecting
                 return( reflectingBC(side, group, angle) ); // manual alteration for reeds, change back
-            } else if (boundary_conditions[side] == 3){ //mms
-                return ( mms_boundary(side, group, angle, hn) );
             } else {
                 bound_warn();
                 return(0.0);
@@ -147,47 +147,47 @@ class problem_space{
         int index_left;
         int index_right;
 
-        if (mms_bool){
-            std::vector<double> temp;
-
+        //if (mms_bool){
+        //    std::vector<double> temp;
+//
+        //    for (int j=0; j<N_angles; j++){
+//
+        //        temp = manSource.group1af(0, dx, dt*time_val, dt, angles[j]);
+//
+        //        af_left_bound[0*2*N_angles + 2*j  ] = temp[1];
+        //        af_left_bound[0*2*N_angles + 2*j + 1] = temp[3];
+        //        
+        //        temp = manSource.group1af(L, dx, dt*time_val, dt, angles[j]);
+//
+        //        af_right_bound[0*2*N_angles + 2*j  ] = temp[0];
+        //        af_right_bound[0*2*N_angles + 2*j + 1] = temp[2];
+        //        
+        //        temp = manSource.group2af(0, dx, dt*time_val, dt, angles[j]);
+//
+        //        af_left_bound[1*2*N_angles + 2*j  ] = temp[1];
+        //        af_left_bound[1*2*N_angles + 2*j + 1] = temp[3];
+//
+        //        temp = manSource.group2af(L, dx, dt*time_val, dt, angles[j]);
+        //        
+        //        af_right_bound[1*2*N_angles + 2*j  ] = temp[0];
+        //        af_right_bound[1*2*N_angles + 2*j + 1] = temp[2];
+        //    }
+//
+        //} else {
+        for (int g=0; g<N_groups; g++){
             for (int j=0; j<N_angles; j++){
 
-                temp = manSource.group1af(0, dx, dt*time_val, dt, angles[j]);
+                index_left  = g*(SIZE_groupBlocks) + 4*j + 2;
+                index_right = ((N_cells-1)*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j) + 3;
 
-                af_left_bound[0*2*N_angles + 2*j  ] = temp[1];
-                af_left_bound[0*2*N_angles + 2*j + 1] = temp[3];
-                
-                temp = manSource.group1af(L, dx, dt*time_val, dt, angles[j]);
+                outofbounds_check(index_right, aflux_last);
+                outofbounds_check(index_left, aflux_last);
 
-                af_right_bound[0*2*N_angles + 2*j  ] = temp[0];
-                af_right_bound[0*2*N_angles + 2*j + 1] = temp[2];
-                
-                temp = manSource.group2af(0, dx, dt*time_val, dt, angles[j]);
-
-                af_left_bound[1*2*N_angles + 2*j  ] = temp[1];
-                af_left_bound[1*2*N_angles + 2*j + 1] = temp[3];
-
-                temp = manSource.group2af(L, dx, dt*time_val, dt, angles[j]);
-                
-                af_right_bound[1*2*N_angles + 2*j  ] = temp[0];
-                af_right_bound[1*2*N_angles + 2*j + 1] = temp[2];
-            }
-
-        } else {
-            for (int g=0; g<N_groups; g++){
-                for (int j=0; j<N_angles; j++){
-
-                    index_left  = g*(SIZE_groupBlocks) + 4*j + 2;
-                    index_right = ((N_cells-1)*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j) + 3;
-
-                    outofbounds_check(index_right, aflux_last);
-                    outofbounds_check(index_left, aflux_last);
-
-                    af_left_bound[g*N_groups + j] = aflux_last[index_left];
-                    af_right_bound[g*N_groups +j] = aflux_last[index_right];
-                }
+                af_left_bound[g*N_groups + j] = aflux_last[index_left];
+                af_right_bound[g*N_groups +j] = aflux_last[index_right];
             }
         }
+        //}
     }
 
     void bound_warn(){
