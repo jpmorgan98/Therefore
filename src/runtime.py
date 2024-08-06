@@ -12,8 +12,9 @@ NP_DOUBLE = np.float64
 
 def compile():
     compCommand = []
-    compCommand.append('module load rocm/6 lapack')
-    compCommand.append('hipcc -fPIC -shared -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -L/home/joamorga/miniconda3/lib -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
+    compCommand.append('module load rocm/6')
+    compCommand.append('hipcc -fPIC -shared -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
+    compCommand.append('hipcc -fPIC -shared -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.so')
     #-fopenmp
     print('compiling therefore')
 
@@ -29,39 +30,57 @@ def loadTherefore():
     Therefore.argtypes = (DOUBLE, INT)
     return(Therefore)
 
-
+def loadSweep():
+    print('loading Sweep')
+    _Sweep = ctypes.cdll.LoadLibrary('./Sweep.so')
+    Sweep = _Sweep.ThereforeSweep
+    Sweep.restype = None
+    #NP_DOUBLE_POINTER = ndpointer(DOUBLE, flags="C_CONTIGUOUS")
+    Sweep.argtypes = (DOUBLE, INT)
+    return(Sweep)
 
 
 if (__name__ == '__main__'):
 
-    hardware_name = argv[1]
+    #hardware_name = argv[1]
 
     dx = np.array([.5]).astype(NP_DOUBLE)
-    #dx = np.array([.1, .075, .05, .025, .01, .0075, .005, .0025, .001]).astype(NP_DOUBLE)
+    #mfp = 
+    #dx = np.array([1, .075, .05, .025, .01, .0075, .005, .0025, .001]).astype(NP_DOUBLE)
     #N_angles = np.array([4, 6, 8, 16, 32, 64, 128])
+    #
 
     #dx = np.array([.1,.05]).astype(NP_DOUBLE)
     N = int( dx.size )
 
-    runTime = np.zeros(N)
+    runTimeOCI = np.zeros(N)
+    runTimeSweep = np.zeros(N)
 
     compile()
-    Therefore = loadTherefore()
+    ThereforeOCI = loadTherefore()
+    ThereforeSweep = loadSweep()
 
     for i in range(N):
 
         print("Timing Therefore at N_angles: ", dx[i])
 
         start = time.time()
-        Therefore(dx[i], 4)
+        ThereforeOCI(dx[i], 4)
         end = time.time()
-        runTime[i] = end - start
-        print(runTime[i])
+        runTimeOCI[i] = end - start
+
+        start = time.time()
+        ThereforeSweep(dx[i], 4)
+        end = time.time()
+        runTimeSweep[i] = end - start
+        print("Total Sweep" , runTimeSweep[i])
 
     print("Completed")
     #dir = 'runtime_results/'
     #file_name = dir + 'runtime_' + hardware_name
-    #print(runTime)
-    #np.savez(file_name, runtime=runTime, dx=dx, N_angles=24)
+    file_name = 'runtimes'
+    print(runTimeSweep)
+    print(runTimeOCI)
+    np.savez(file_name, OCI=runTimeOCI, Sweep=runTimeSweep, dx=dx, N_angles=24)
 
     
