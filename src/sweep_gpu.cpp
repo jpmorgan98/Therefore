@@ -760,27 +760,28 @@ void timeLoop(std::vector<double> af_previous, std::vector<cell> &cells, problem
 
 
 
-int main(){
+//int main(){
+extern "C"{ int ThereforeSweep ( double dx, int N_angles ) {
     // testing function
 
     using namespace std;
     
     // problem definition
     // eventually from an input deck
-    double dx = .01;
-    double dt = 1.0;
-    vector<double> v = {1, 1};
-    vector<double> xsec_total = {1.5454, 0.04568};
+    // double dx = .01;
+    double dt = 0.1;
+    vector<double> v = {1, .5};
+    vector<double> xsec_total = {1.5454, 0.4568};
     vector<double> xsec_scatter = {0.61789, 0.072534};
     //vector<double> xsec_scatter = {0,0};
     //double ds = 0.0;
     vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
-    double Length = 1;
+    double Length = 20;
     double IC_homo = 0;
     
-    int N_cells = 100; //10
-    int N_angles = 2;
+    int N_cells = int(Length/dx); //int N_cells = 100; //10
+    //int N_angles = 2;
     int N_time = 1;
     int N_groups = 2;
 
@@ -875,3 +876,4 @@ int main(){
 
     return(1);
 }
+} // end of extern function

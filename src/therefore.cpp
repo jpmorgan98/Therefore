@@ -86,8 +86,8 @@ void eosPrint(ts_solutions state);
 // i space, m is angle, k is time, g is energy group
 
 //int main(void){
-//extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
-int main(){
+extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
+//int main(){
 
     if ( print_title_card )
         print_title();
@@ -96,8 +96,8 @@ int main(){
     
     // problem definition
     // eventually from an input deck
-    double dx = .01;
-    double dt = 1.0;
+    // double dx = .01;
+    double dt = 0.1;
     vector<double> v = {1, .5};
     vector<double> xsec_total = {1.5454, 0.45468};
     //vector<double> xsec_total = {1, 1};
@@ -107,11 +107,11 @@ int main(){
     vector<double> Q = {1, 1, 1, 1, 1, 1, 1, 1};
     //vector<double> Q = {1,0,0,0,0,0,0,0,0};
 
-    double Length = 1;
+    double Length = 20;
     double IC_homo = 0;
     
-    int N_cells = int(1/dx); //10
-    int N_angles = 48;
+    int N_cells = int(Length/dx); //10
+    // int N_angles = 48;
     int N_time = 1;
     int N_groups = 2;
 
@@ -243,7 +243,7 @@ int main(){
         cells.push_back(cellCon);
 
     }
-    ps.mms_bool = false;
+    //ps.mms_bool = false;
 
     // ===================
 
@@ -290,4 +290,4 @@ int main(){
     
     return(0);
 } //end of main
-//} // end of extern function
+} // end of extern function

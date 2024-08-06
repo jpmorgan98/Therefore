@@ -44,7 +44,7 @@ class run{
         int info;
 
         // source for the method of manufactured solution
-        mms manSource;
+        //mms manSource;
 
         void init_vectors(){
             // vector org angular flux from last iteration
@@ -108,7 +108,7 @@ class run{
         }
 
 
-
+        /*
         void sourceSource( ){
             vector<double> temp;
             for (int i=0; i<ps.N_cells; ++i){
@@ -131,7 +131,7 @@ class run{
                     }
                 //}
             }
-        }
+        }*/
 
 
         void linear_solver(vector<double> &A_copy, vector<double> &b){
@@ -206,7 +206,7 @@ class run{
                 }
             }
         }
-
+        /*
         void publish_mms (){
 
             std::vector<double> mms_temp(ps.N_mat);
@@ -253,6 +253,7 @@ class run{
 
             cout << "time integrated mms solutions published " << endl;
         }
+        */
 
         void run_timestep(){
 
@@ -272,9 +273,9 @@ class run{
                 time += ps.dt;
                 init_af_timestep();
 
-                if ( ps.mms_bool ){
-                    sourceSource( );
-                }
+                //if ( ps.mms_bool ){
+                //    sourceSource( );
+                //}
 
                 // resets
                 itter = 0;          // iteration counter
