@@ -44,9 +44,7 @@ if (__name__ == '__main__'):
 
     #hardware_name = argv[1]
 
-    dx = np.array([.5]).astype(NP_DOUBLE)
-    #mfp = 
-    #dx = np.array([1, .075, .05, .025, .01, .0075, .005, .0025, .001]).astype(NP_DOUBLE)
+    dx = np.array([10, 5, 1, .5, .25, .1, .05, .01]).astype(NP_DOUBLE)
     #N_angles = np.array([4, 6, 8, 16, 32, 64, 128])
     #
 
@@ -65,12 +63,12 @@ if (__name__ == '__main__'):
         print("Timing Therefore at N_angles: ", dx[i])
 
         start = time.time()
-        ThereforeOCI(dx[i], 4)
+        ThereforeOCI(dx[i], 16)
         end = time.time()
         runTimeOCI[i] = end - start
 
         start = time.time()
-        ThereforeSweep(dx[i], 4)
+        ThereforeSweep(dx[i], 16)
         end = time.time()
         runTimeSweep[i] = end - start
         print("Total Sweep" , runTimeSweep[i])
@@ -79,7 +77,9 @@ if (__name__ == '__main__'):
     #dir = 'runtime_results/'
     #file_name = dir + 'runtime_' + hardware_name
     file_name = 'runtimes'
+    print("Sweep")
     print(runTimeSweep)
+    print("OCI")
     print(runTimeOCI)
     np.savez(file_name, OCI=runTimeOCI, Sweep=runTimeSweep, dx=dx, N_angles=24)
 

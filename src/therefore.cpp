@@ -107,7 +107,7 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     vector<double> Q = {1, 1, 1, 1, 1, 1, 1, 1};
     //vector<double> Q = {1,0,0,0,0,0,0,0,0};
 
-    double Length = 20;
+    double Length = 100;
     double IC_homo = 0;
     
     int N_cells = int(Length/dx); //10

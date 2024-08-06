@@ -604,15 +604,15 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
         // communicate energy!
         compute_g2g( cells, sf_new, ps );
 
-        af_2 = af_new;
+        //af_2 = af_new;
 
-        sweep_normal( af_new, af_previous, sf_new, cells, ps );
-        sweep_batched( af_2, af_previous, sf_new, cells, ps );
+        //sweep_normal( af_new, af_previous, sf_new, cells, ps );
+        sweep_batched( af_new, af_previous, sf_new, cells, ps );
 
         //print_vec_sd(af_new);
         //print_vec_sd(af_2);
 
-        check_close(af_new, af_2);
+        //check_close(af_new, af_2);
 
         // compute scalar fluxes
         computeSF( af_new, sf_new, ps );
@@ -777,7 +777,7 @@ extern "C"{ int ThereforeSweep ( double dx, int N_angles ) {
     //double ds = 0.0;
     vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
-    double Length = 20;
+    double Length = 100;
     double IC_homo = 0;
     
     int N_cells = int(Length/dx); //int N_cells = 100; //10
