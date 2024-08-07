@@ -9,12 +9,15 @@ from sys import argv
 INT = ctypes.c_int
 DOUBLE = ctypes.c_double
 NP_DOUBLE = np.float64
+NP_INT = np.intc
+
+file_name = 'runtimes'
+
 
 def compile():
     compCommand = []
-    compCommand.append('module load rocm/6')
-    compCommand.append('hipcc -fPIC -shared -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
-    compCommand.append('hipcc -fPIC -shared -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.so')
+    compCommand.append('hipcc -fPIC -shared -O3 -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
+    compCommand.append('hipcc -fPIC -shared -O3 -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.so')
     #-fopenmp
     print('compiling therefore')
 
@@ -44,34 +47,43 @@ if (__name__ == '__main__'):
 
     #hardware_name = argv[1]
 
-    dx = np.array([10, 5, 1, .5, .25, .1, .05, .01]).astype(NP_DOUBLE)
-    #N_angles = np.array([4, 6, 8, 16, 32, 64, 128])
+    # first value is repeated to allow codes to spool up
+    # this time will be removed and not shown
+    dx = np.array([10, 10, 5, 1, .5, .25, .1, .05, .01]).astype(NP_DOUBLE)
+    angles = np.array([4, 8, 16, 32]).astype(NP_INT)
     #
 
     #dx = np.array([.1,.05]).astype(NP_DOUBLE)
-    N = int( dx.size )
+    N_space = int( dx.size )
+    N_angles = int ( angles.size )
 
-    runTimeOCI = np.zeros(N)
-    runTimeSweep = np.zeros(N)
+    runTimeOCI = np.zeros((N_space, N_angles))
+    runTimeSweep = np.zeros((N_space, N_angles))
 
     compile()
     ThereforeOCI = loadTherefore()
     ThereforeSweep = loadSweep()
 
-    for i in range(N):
+    for j in range(N_angles):
+        for i in range(N_space):
+            
+            print()
+            print(">>>Timing Therefore at dx: ", dx[i], " and N: ", angles[j])
+            print()
 
-        print("Timing Therefore at N_angles: ", dx[i])
+            start = time.time()
+            ThereforeOCI(dx[i], angles[j])
+            end = time.time()
+            runTimeOCI[i, j] = end - start
+            print("     Total OCI" , runTimeOCI[i, j])
 
-        start = time.time()
-        ThereforeOCI(dx[i], 16)
-        end = time.time()
-        runTimeOCI[i] = end - start
+            start = time.time()
+            ThereforeSweep(dx[i], angles[j])
+            end = time.time()
+            runTimeSweep[i, j] = end - start
+            print("     Total Sweep" , runTimeSweep[i, j])
 
-        start = time.time()
-        ThereforeSweep(dx[i], 16)
-        end = time.time()
-        runTimeSweep[i] = end - start
-        print("Total Sweep" , runTimeSweep[i])
+            np.savez(file_name, OCI=runTimeOCI, Sweep=runTimeSweep, dx=dx, angles=angles, i=i, j=j)
 
     print("Completed")
     #dir = 'runtime_results/'
@@ -81,6 +93,4 @@ if (__name__ == '__main__'):
     print(runTimeSweep)
     print("OCI")
     print(runTimeOCI)
-    np.savez(file_name, OCI=runTimeOCI, Sweep=runTimeSweep, dx=dx, N_angles=24)
-
-    
+    np.savez(file_name, OCI=runTimeOCI, Sweep=runTimeSweep, dx=dx, angles=angles)

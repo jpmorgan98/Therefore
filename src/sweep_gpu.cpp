@@ -11,6 +11,9 @@
 // g++ -g -L -llapack
 // 
 
+const bool cycle_print = false;
+const bool save_output = false;
+
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
 void Axeb( std::vector<double> &A, std::vector<double> &b){
@@ -653,23 +656,23 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
         error_n2 = error_n1;
         error_n1 = error;
 
+        if (cycle_print){
+            // CYCLE PRINTING
+            int cycle_print_flag = 0; // for printing headers
 
-        // CYCLE PRINTING
-        int cycle_print_flag = 0; // for printing headers
+            if (itter != 0) 
+                cycle_print_flag = 1;
+            
+            int t = 0;
 
-        if (itter != 0) 
-            cycle_print_flag = 1;
-        
-        int t = 0;
-
-        if (cycle_print_flag == 0) {
-            cout << ">>>CYCLE INFO FOR TIME STEP: " << t <<"<<<"<< endl;
-            printf("cycle   error         error_n1      error_n2     spec_rad   cycle_time\n");
-            printf("===================================================================================\n");
-            cycle_print_flag = 1;
+            if (cycle_print_flag == 0) {
+                cout << ">>>CYCLE INFO FOR TIME STEP: " << t <<"<<<"<< endl;
+                printf("cycle   error         error_n1      error_n2     spec_rad   cycle_time\n");
+                printf("===================================================================================\n");
+                cycle_print_flag = 1;
+            }
+            printf("%3d      %1.4e    %1.4e    %1.4e   %1.4e \n", itter, error, error_n1, error_n2, spec_rad );
         }
-        printf("%3d      %1.4e    %1.4e    %1.4e   %1.4e \n", itter, error, error_n1, error_n2, spec_rad );
-
 
         itter++;
         
@@ -730,28 +733,31 @@ void timeLoop(std::vector<double> af_previous, std::vector<cell> &cells, problem
         // run convergence loop
         convergenceLoop(af_solution,  af_previous, cells, ps);
 
-        // save data
-        string ext = ".csv";
-        string file_name = "Sweep_afluxUnsorted";
-        string dt = to_string(t);
+        if (save_output){
 
-        file_name = file_name + dt + ext;
+            // save data
+            string ext = ".csv";
+            string file_name = "Sweep_afluxUnsorted";
+            string dt = to_string(t);
 
-        std::ofstream output(file_name);
-        output << "TIME STEP: " << t << "Unsorted solution vector" << endl;
-        output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
-        for (int i=0; i<af_solution.size(); i++){
-            output << af_solution[i] << "," << endl;
+            file_name = file_name + dt + ext;
+
+            std::ofstream output(file_name);
+            output << "TIME STEP: " << t << "Unsorted solution vector" << endl;
+            output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
+            for (int i=0; i<af_solution.size(); i++){
+                output << af_solution[i] << "," << endl;
+            }
+
+            std::ofstream dist("x.csv");
+            dist << "x: " << endl;
+            for (int i=0; i<cells.size(); i++){
+                dist << cells[i].x_left << "," << endl;
+                dist << cells[i].x_left + cells[i].dx/2 << "," <<endl;
+            }
+
+            cout << "file saved under: " << file_name << endl;
         }
-
-        std::ofstream dist("x.csv");
-        dist << "x: " << endl;
-        for (int i=0; i<cells.size(); i++){
-            dist << cells[i].x_left << "," << endl;
-            dist << cells[i].x_left + cells[i].dx/2 << "," <<endl;
-        }
-
-        cout << "file saved under: " << file_name << endl;
 
         // new previous info
         af_previous = af_solution;
@@ -869,10 +875,10 @@ extern "C"{ int ThereforeSweep ( double dx, int N_angles ) {
 
     std::vector<double> af_previous(N_mat, 0);
 
-    std::cout << "entering conv loop" <<std::endl;
+    //std::cout << "entering conv loop" <<std::endl;
 
     timeLoop(af_previous, cells, ps);
-    std::cout << "done" << std::endl;
+    //std::cout << "done" << std::endl;
 
     return(1);
 }

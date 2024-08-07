@@ -21,7 +21,7 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 const bool print_mats = false;
 const bool debug_print = false;
 const bool gpu = false;
-const bool cycle_print = true;
+const bool cycle_print = false;
 const bool print_title_card = false;
 const bool save_output = false;
 

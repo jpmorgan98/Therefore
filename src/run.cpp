@@ -83,28 +83,28 @@ class run{
         }
 
         void save_eos_data(int t){
-                string ext = ".csv";
-                string file_name = "afluxUnsorted";
-                string dt = to_string(t);
+            string ext = ".csv";
+            string file_name = "afluxUnsorted";
+            string dt = to_string(t);
 
-                file_name = file_name + dt + ext;
+            file_name = file_name + dt + ext;
 
-                std::ofstream output(file_name);
-                output << "TIME STEP: " << t << "Unsorted solution vector" << endl;
-                output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
-                for (int i=0; i<aflux_last.size(); i++){
-                    output << aflux_last[i] << "," << endl;
-                }
+            std::ofstream output(file_name);
+            output << "TIME STEP: " << t << "Unsorted solution vector" << endl;
+            output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
+            for (int i=0; i<aflux_last.size(); i++){
+                output << aflux_last[i] << "," << endl;
+            }
 
-                std::ofstream dist("x.csv");
-                dist << "x: " << endl;
-                for (int i=0; i<cells.size(); i++){
-                    dist << cells[i].x_left << "," << endl;
-                    dist << cells[i].x_left + cells[i].dx/2 << "," <<endl;
-                }
+            std::ofstream dist("x.csv");
+            dist << "x: " << endl;
+            for (int i=0; i<cells.size(); i++){
+                dist << cells[i].x_left << "," << endl;
+                dist << cells[i].x_left + cells[i].dx/2 << "," <<endl;
+            }
 
 
-                cout << "file saved under: " << file_name << endl;
+            cout << "file saved under: " << file_name << endl;
         }
 
 
