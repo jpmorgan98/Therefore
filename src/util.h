@@ -63,6 +63,20 @@ void print_cm_sp(std::vector<double> vec, int offset, int N){
 }
 
 
+void print_cm_point_sp(double *vec, int offset, int N){
+    using namespace std;
+
+    cout << "Matrix is of size ["<<N<<","<<N<<"]"<<endl;
+
+    for (int i=offset; i<offset + N; i++){
+        for (int j=0; j<N; j++){
+            printf("%5.2f ", vec[j*N+i]);
+        }
+        printf("\n");
+    }
+}
+
+
 void print_vec(int N, double *vec){
     using namespace std;
 
@@ -209,6 +223,7 @@ inline void outofbounds_check(int index, std::vector<double> &vec){
         cout<<">>>>>>>>>>>>>>>>>>>>ERROR<<<<<<<<<<<<<<<<<<<<"<<endl;
         cout<<"something was indexed over a vectors max size"<<endl;
         cout<<"index: " << index <<" size of vec: "<<vec.size()<<endl;
+        exit(1);
     }
 }
 

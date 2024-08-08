@@ -71,8 +71,8 @@ for ax in axs.flat:
     ax.set(xlabel=r'mfp [$\Sigma_2 * \Delta x$]', ylabel='speedup [s]')
 
 # Hide x labels and tick labels for top plots and y ticks for right plots.
-for ax in axs.flat:
-    ax.label_outer()
+#for ax in axs.flat:
+#    ax.label_outer()
 
 plt.savefig("speedup.png")
 

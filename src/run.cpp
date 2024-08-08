@@ -517,6 +517,8 @@ class run{
             hipFree(dboundary);
             hipFree(db_const);
             hipFree(dps);
+
+            rocblas_destroy_handle(handle);
             
         }
 };

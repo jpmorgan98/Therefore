@@ -19,7 +19,7 @@ def compile():
     compCommand.append('hipcc -fPIC -shared -O3 -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
     compCommand.append('hipcc -fPIC -shared -O3 -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.so')
     #-fopenmp
-    print('compiling therefore')
+    print('compiling therefore and sweep')
 
     for i in range(len(compCommand)):
         os.system(compCommand[i])
@@ -51,7 +51,6 @@ if (__name__ == '__main__'):
     # this time will be removed and not shown
     dx = np.array([10, 10, 5, 1, .5, .25, .1, .05, .01]).astype(NP_DOUBLE)
     angles = np.array([4, 8, 16, 32]).astype(NP_INT)
-    #
 
     #dx = np.array([.1,.05]).astype(NP_DOUBLE)
     N_space = int( dx.size )
