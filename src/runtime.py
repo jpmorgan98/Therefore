@@ -16,8 +16,8 @@ file_name = 'runtimes'
 
 def compile():
     compCommand = []
-    compCommand.append('hipcc -fPIC -shared -O3 -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
-    compCommand.append('hipcc -fPIC -shared -O3 -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.so')
+    compCommand.append('hipcc -fPIC -shared -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
+    compCommand.append('hipcc -fPIC -shared -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.so')
     #-fopenmp
     print('compiling therefore and sweep')
 

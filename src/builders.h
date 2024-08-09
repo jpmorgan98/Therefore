@@ -153,6 +153,56 @@ void b_gen_const_win_iter(std::vector<double> &b, std::vector<double> &aflux_pre
 }
 
 
+void b_gen_const_win_iter_ng2g(std::vector<double> &b, std::vector<double> &aflux_previous, std::vector<cell> cells, problem_space ps){
+    //brief: builds b
+
+    vector<double> b_small;
+
+    // helper index
+    int index_start;
+    int index_start_n1;
+    int index_start_p1;
+
+    for (int i=0; i<ps.N_cells; i++){
+        
+        for (int g=0; g<ps.N_groups; g++){
+            
+            for (int j=0; j<ps.N_angles; j++){
+
+                // the first index in the smallest chunk of 4
+                index_start = (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+                // 4 blocks organized af_l, af_r, af_hn_l, af_hn_r
+
+                // angular flux from the k-1+1/2 from within the cell
+                double af_hl_l = aflux_previous[index_start+2];
+                double af_hl_r = aflux_previous[index_start+3];
+
+                // negative angle
+                if (ps.angles[j] < 0){
+                    //cell &cell, int group, double mu, int angle, double af_hl_L, double af_hl_R, double af_R, double af_hn_R
+                    b_small = b_neg_const_win_itteration(cells[i], g, j, af_hl_l, af_hl_r);
+
+                // positive angles
+                } else {
+                     //b_pos_const_win_itteration( cell &cell, int group, int angle, double af_hl_L, double af_hl_R )
+                    b_small = b_pos_const_win_itteration(cells[i], g, j, af_hl_l, af_hl_r);
+                }
+
+                outofbounds_check(index_start,   b);
+                outofbounds_check(index_start+1, b);
+                outofbounds_check(index_start+2, b);
+                outofbounds_check(index_start+3, b);
+                
+                b[index_start]   = b_small[0];
+                b[index_start+1] = b_small[1];
+                b[index_start+2] = b_small[2];
+                b[index_start+3] = b_small[3];
+            }
+        }
+    }
+}
+
+
 void b_gen_var_win_iter(std::vector<double> &b, std::vector<double> &aflux_last, problem_space ps){
     //brief: builds b
 
@@ -234,6 +284,76 @@ void A_gen_sparse(std::vector<double> &A, std::vector<cell> cells, problem_space
 }
 
 
+void A_c_gen_ng2g(int i, double* A_c, std::vector<cell> cells, problem_space ps){
+    /*
+    brief: assembles a coefficient matrix within all groups and angles in a cell
+    NOTE: ROW MAJOR FORMAT
+    */
+
+   int size_mat = pow(ps.N_angles*4, 2);
+
+    for (int g=0; g<ps.N_groups; g++){
+
+        int index_start = g*size_mat;
+        int Adim_angle = 4*ps.N_angles; 
+
+        //vector<double> A_c_g(4*ps.N_angles * 4*ps.N_angles);
+        vector<double> A_c_g_a(4*4);
+        vector<double> temp(4*4);
+        
+
+        for (int j=0; j<ps.N_angles; j++){
+            if (ps.angles[j] > 0){
+                temp = A_pos_rm(cells[i], ps.angles[j], g);
+                A_c_g_a = row2colSq(temp);
+            } else {
+                temp = A_neg_rm(cells[i], ps.angles[j], g);
+                A_c_g_a = row2colSq(temp);
+            }
+            //std::vector<double> A_c_cm = row2colSq(A_c_rm);
+            index_start2 = index_start + j*16*ps.N_angle + j*4;
+            // push it into an all angle
+            for (int c=0; c<4; ++c){ // moving col major
+            for (int r=0; r<16; r++){
+                A_c[c + r*4*N_angle + index_start2] = A_c_g_a[c + r*4]; 
+            }}
+        }
+
+        vector<double> temp2(size_mat);
+        vector<double> scatter_mat(size_mat);
+
+        int index_start = 0;
+        //int index_start = 4*ps.N_angles*gp + 4*4*ps.N_angles*ps.N_angles*ps.N_groups
+        
+        temp2 = scatter(cells[i].dx, cells[i].xsec_scatter[g], ps.weights, ps.N_angles);
+        scatter_mat = row2colSq(temp2);
+
+        // indexing from Angle blocks within a group to cell blocks of all groups
+        for (int r=0; r<size_mat r++){ 
+            A_c[index_start + r] -= g2gp_scatter[r];
+        }
+    }
+}
+
+void A_gen_sparse_ng2g(std::vector<double> &A, std::vector<cell> cells, problem_space ps){
+    /*breif: only non zero elements of the array are stored in a single array of total size
+    (N_an*N_group*4)**2*N_cells. A cell block soultion is then stored in a column
+    major where the leading value is an offset from */
+    
+    for (int i=0; i<ps.N_cells; i++){
+        A_c_gen(i, A_c_rm, cells, ps);
+        std::vector<double> A_c_cm = row2colSq(A_c_rm);
+
+        int index_start = i*ps.ELEM_cellBlocks;
+
+        for (int r=0; r<ps.ELEM_cellBlocks; ++r){
+            A[index_start+r] = A_c_cm[r];
+        }
+    }
+
+}
+
+
 void A_gen(std::vector<double> &A, std::vector<cell> cells, problem_space ps){ 
     /*FOR DEBUGING ONLY! 
     Produces whole ass sparse matrix structure for PBJ method zeros and all in
@@ -258,6 +378,7 @@ void A_gen(std::vector<double> &A, std::vector<cell> cells, problem_space ps){
         }
     }
 }
+
 
 
 void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_space ps){
