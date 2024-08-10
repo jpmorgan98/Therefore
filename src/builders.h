@@ -152,7 +152,7 @@ void b_gen_const_win_iter(std::vector<double> &b, std::vector<double> &aflux_pre
     }
 }
 
-
+/*
 void b_gen_const_win_iter_ng2g(std::vector<double> &b, std::vector<double> &aflux_previous, std::vector<cell> cells, problem_space ps){
     //brief: builds b
 
@@ -201,6 +201,7 @@ void b_gen_const_win_iter_ng2g(std::vector<double> &b, std::vector<double> &aflu
         }
     }
 }
+*/
 
 
 void b_gen_var_win_iter(std::vector<double> &b, std::vector<double> &aflux_last, problem_space ps){
@@ -283,12 +284,12 @@ void A_gen_sparse(std::vector<double> &A, std::vector<cell> cells, problem_space
     }
 }
 
-
+/*
 void A_c_gen_ng2g(int i, double* A_c, std::vector<cell> cells, problem_space ps){
     /*
     brief: assembles a coefficient matrix within all groups and angles in a cell
     NOTE: ROW MAJOR FORMAT
-    */
+    // 
 
    int size_mat = pow(ps.N_angles*4, 2);
 
@@ -338,7 +339,7 @@ void A_c_gen_ng2g(int i, double* A_c, std::vector<cell> cells, problem_space ps)
 void A_gen_sparse_ng2g(std::vector<double> &A, std::vector<cell> cells, problem_space ps){
     /*breif: only non zero elements of the array are stored in a single array of total size
     (N_an*N_group*4)**2*N_cells. A cell block soultion is then stored in a column
-    major where the leading value is an offset from */
+    major where the leading value is an offset from //
     
     for (int i=0; i<ps.N_cells; i++){
         A_c_gen(i, A_c_rm, cells, ps);
@@ -352,6 +353,7 @@ void A_gen_sparse_ng2g(std::vector<double> &A, std::vector<cell> cells, problem_
     }
 
 }
+*/
 
 
 void A_gen(std::vector<double> &A, std::vector<cell> cells, problem_space ps){ 

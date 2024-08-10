@@ -28,7 +28,7 @@ def loadTherefore():
     print('loading Therefore')
     _Therefore = ctypes.cdll.LoadLibrary('./Therefore.so')
     Therefore = _Therefore.ThereforeOCI
-    Therefore.restype = None
+    Therefore.restype = DOUBLE
     #NP_DOUBLE_POINTER = ndpointer(DOUBLE, flags="C_CONTIGUOUS")
     Therefore.argtypes = (DOUBLE, INT)
     return(Therefore)
@@ -37,7 +37,7 @@ def loadSweep():
     print('loading Sweep')
     _Sweep = ctypes.cdll.LoadLibrary('./Sweep.so')
     Sweep = _Sweep.ThereforeSweep
-    Sweep.restype = None
+    Sweep.restype = DOUBLE
     #NP_DOUBLE_POINTER = ndpointer(DOUBLE, flags="C_CONTIGUOUS")
     Sweep.argtypes = (DOUBLE, INT)
     return(Sweep)
@@ -49,8 +49,11 @@ if (__name__ == '__main__'):
 
     # first value is repeated to allow codes to spool up
     # this time will be removed and not shown
-    dx = np.array([10, 10, 5, 1, .5, .25, .1, .05, .01]).astype(NP_DOUBLE)
+    dx = np.array([10, 10, 5, 1, .5, .75, .25, .15, .1, .05, .01]).astype(NP_DOUBLE)
     angles = np.array([4, 8, 16, 32]).astype(NP_INT)
+
+    #dx = np.array([10]).astype(NP_DOUBLE)
+    #angles = np.array([4]).astype(NP_INT)
 
     #dx = np.array([.1,.05]).astype(NP_DOUBLE)
     N_space = int( dx.size )
@@ -70,16 +73,16 @@ if (__name__ == '__main__'):
             print(">>>Timing Therefore at dx: ", dx[i], " and N: ", angles[j])
             print()
 
-            start = time.time()
-            ThereforeOCI(dx[i], angles[j])
-            end = time.time()
-            runTimeOCI[i, j] = end - start
+            #start = time.time()
+            time_oci = ThereforeOCI(dx[i], angles[j])
+            #end = time.time()
+            runTimeOCI[i, j] = time_oci# end - start
             print("     Total OCI" , runTimeOCI[i, j])
 
-            start = time.time()
-            ThereforeSweep(dx[i], angles[j])
-            end = time.time()
-            runTimeSweep[i, j] = end - start
+            #start = time.time()
+            time_sweep = ThereforeSweep(dx[i], angles[j])
+            #end = time.time()
+            runTimeSweep[i, j] = time_sweep#end - start
             print("     Total Sweep" , runTimeSweep[i, j])
 
             np.savez(file_name, OCI=runTimeOCI, Sweep=runTimeSweep, dx=dx, angles=angles, i=i, j=j)

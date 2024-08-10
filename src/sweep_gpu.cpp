@@ -6,6 +6,8 @@
 #include <hip/hip_runtime.h>
 #include "rocsolver.cpp"
 
+const bool OPTIMIZED = true;
+
 //compile commands 
 // lockhartt cc sweep.cpp -std=c++20
 // g++ -g -L -llapack
@@ -119,7 +121,7 @@ void gpu_sb_nopt_Axeb(double *A_sp_cm, vector<double> &b, int N_groups, int N_an
     //solve on gpu
 }
 
-void gpu_sb_Axeb(double *dA, double *db, int *ipiv, int *dinfo, int N_groups, int N_angles, rocblas_handle handle){
+void gpu_sb_Axeb(double *dA, double *db, int itter, int *ipiv, int *dinfo, int N_groups, int N_angles, rocblas_handle handle){
 
     rocblas_int N = 4;           // rows and cols in each household problem
     rocblas_int lda = 4;         // leading dimension of A in each household problem
@@ -138,6 +140,7 @@ void gpu_sb_Axeb(double *dA, double *db, int *ipiv, int *dinfo, int N_groups, in
     //double *dA, *db;
 
     rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
+
     //hipDeviceSynchronize();
 
     
@@ -399,21 +402,24 @@ void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, s
 }
 
 
-void sweep_batched_gpu(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
+void sweep_batched_gpu(int itter, double* dA, std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
     //int size = 4 * ps.N_groups * ps.N_angles; // N_g*N_a mat
 
-    std::vector<double> A (16 * ps.N_groups * ps.N_angles * ps.N_cells);
-    
-    build_A_fullproblem(A, cells, ps);
+    rocblas_int N = 4;           // rows and cols in each household problem
+    rocblas_int lda = 4;         // leading dimension of A in each household problem
+    rocblas_int ldb = 4;         // leading dimension of B in each household problem
+    rocblas_int nrhs = 1;                         // number of nrhs in each household problem
+    rocblas_stride strideA = 16;  // stride from start of one matrix to the next (household to the next)
+    rocblas_stride strideB = 4;  // stride from start of one rhs to the next
+    rocblas_stride strideP = 4;  // stride from start of one pivot to the next
+    rocblas_int batch_count = ps.N_angles * ps.N_groups;         // number of matricies (in this case number of cells)
 
     //print_cm_sp(A, ps.SIZE_cellBlocks, 4);
     int N_elements_cell = 16 * ps.N_groups * ps.N_angles;
 
-    double *dA;
-    hipMalloc(&dA, sizeof(double)*A.size());         // allocates memory for strided matrix container
-    hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
-
     int N_mats = ps.N_angles * ps.N_groups;
+
+    //hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
 
     double *db;
     hipMalloc(&db, sizeof(double)*4*N_mats);         // allocates memory for strided rhs container
@@ -425,12 +431,17 @@ void sweep_batched_gpu(std::vector<double> &af_last, std::vector<double> &af_pre
     rocblas_handle handle;
     rocblas_create_handle(&handle);
 
+    //if ( !OPTIMIZED ){
+    //    hipMemcpy(dA, &A[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
+    //}
+
     //int threadsperblock = 256;
     //int blockspergrid = (ps.N_mat + (threadsperblock - 1)) / threadsperblock;
 
     std::vector<double> b_cell (4 * ps.N_groups * ps.N_angles);
 
     for (int i=0; i<ps.N_cells; ++i){
+
         int i_n = ps.N_cells-1 - i; // index for the negative sweeps
         
         //build A for Cell for all group and angle within cell
@@ -446,7 +457,26 @@ void sweep_batched_gpu(std::vector<double> &af_last, std::vector<double> &af_pre
         hipMemcpy( db, &b_cell[0], sizeof(double)*4*N_mats, hipMemcpyHostToDevice );
 
         //solve for x in Ax=b
-        gpu_sb_Axeb( &dA[N_elements_cell*i], db, ipiv, dinfo, ps.N_groups, ps.N_angles, handle );
+        //gpu_sb_Axeb( &dA[N_elements_cell*i], db, ipiv, dinfo, ps.N_groups, ps.N_angles, handle );
+
+
+        if ( OPTIMIZED ){
+        //std::cout << "OPTIMIZED" << std::endl;
+            if (itter == 0){
+                rocsolver_dgesv_strided_batched(handle, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
+                hipDeviceSynchronize();
+            } else {
+                //enum rocblas_operation_none;
+                rocsolver_dgetrs_strided_batched(handle, rocblas_operation_none, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, batch_count);
+                hipDeviceSynchronize();
+            } 
+        } else {
+            //std::cout << "NOT OPTIMIZED" << std::endl;
+            rocsolver_dgesv_strided_batched(handle, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
+            hipDeviceSynchronize();
+        }
+
+
         //sb_Axeb(A_cell, b_cell, ps.N_groups, ps.N_angles);
 
         hipMemcpy( &b_cell[0], db, sizeof(double)*4*N_mats, hipMemcpyDeviceToHost );
@@ -460,8 +490,6 @@ void sweep_batched_gpu(std::vector<double> &af_last, std::vector<double> &af_pre
     hipFree(db);
 
     rocblas_destroy_handle( handle );
-
-    hipFree(dA);
 }
 
 /*
@@ -701,6 +729,17 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
     //std::vector<double> af_2(af_new.size());
 
     //build_A
+    std::vector<double> A (16 * ps.N_groups * ps.N_angles * ps.N_cells);
+    
+    build_A_fullproblem(A, cells, ps);
+    double *dA;
+    hipMalloc(&dA, sizeof(double)*A.size());         // allocates memory for strided matrix container
+    hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
+    //double *dA;
+    //hipMalloc(&dA, sizeof(double)*A.size());         // allocates memory for strided matrix container
+    //hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
+
+    Timer timer;
 
     while (converged){
 
@@ -709,8 +748,12 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
 
         //af_2 = af_new;
 
+        if ( !OPTIMIZED ){
+            hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
+        }
+
         //sweep_normal( af_new, af_previous, sf_new, cells, ps );
-        sweep_batched_gpu( af_new, af_previous, sf_new, cells, ps );
+        sweep_batched_gpu( itter, dA, af_new, af_previous, sf_new, cells, ps );
         //sweep_batched( af_2, af_previous, sf_new, cells, ps );
 
         //print_vec_sd(af_new);
@@ -785,6 +828,14 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
         //print_vec_sd(af_new);
 
     } // end while loop
+
+    hipFree(dA);
+    ps.time_conv_loop = timer.elapsed();
+    ps.av_time_per_itter = timer.elapsed()/itter-1;
+
+    //std::cout << "Time elapsed in SI transport only: " << timer.elapsed() << " seconds\n";
+
+
 } // end convergence function
 
 
@@ -868,7 +919,7 @@ void timeLoop(std::vector<double> af_previous, std::vector<cell> &cells, problem
 
 
 //int main(){
-extern "C"{ int ThereforeSweep ( double dx, int N_angles ) {
+extern "C"{ double ThereforeSweep ( double dx, int N_angles ) {
     // testing function
 
     using namespace std;
@@ -983,6 +1034,8 @@ extern "C"{ int ThereforeSweep ( double dx, int N_angles ) {
     timeLoop(af_previous, cells, ps);
     //std::cout << "done" << std::endl;
 
-    return(1);
+    //std::cout << "transport sweeps in c++ " << ps.time_conv_loop << std::endl;
+
+    return(ps.time_conv_loop);
 }
 } // end of extern function

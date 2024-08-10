@@ -4,7 +4,7 @@
 #include "rocsolver.cpp"
 //#include <omp.h>
 
-bool OPTIMIZED = false;
+bool OPTIMIZED = true;
 
 // lapack function! To copmile requires <-Ipath/to/lapack/headers -llapack>
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
@@ -441,6 +441,8 @@ class run{
 
             hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
 
+            Timer timer;
+
             // on gpu!
             while (converged){
 
@@ -506,6 +508,11 @@ class run{
 
             }
 
+            ps.time_conv_loop = timer.elapsed();
+            ps.av_time_per_itter = timer.elapsed()/itter-1;
+
+            //std::cout << "Time elapsed in OCI transport only: " << timer.elapsed() << " seconds\n";
+
             hipMemcpy(&aflux_previous[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
 
             hipFree(ipiv);
@@ -519,6 +526,10 @@ class run{
             hipFree(dps);
 
             rocblas_destroy_handle(handle);
+
+            
+
+
             
         }
 };

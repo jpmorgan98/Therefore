@@ -20,8 +20,8 @@ auth: J Piper Morgan (morgajoa@oregonstate.edu)*/
 
 const bool print_mats = false;
 const bool debug_print = false;
-const bool gpu = false;
-const bool cycle_print = false;
+//const bool gpu = false;
+const bool cycle_print = true;
 const bool print_title_card = false;
 const bool save_output = false;
 
@@ -86,7 +86,7 @@ void eosPrint(ts_solutions state);
 // i space, m is angle, k is time, g is energy group
 
 //int main(void){
-extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
+extern "C"{ double ThereforeOCI ( double dx, int N_angles ) {
 //int main(){
 
     if ( print_title_card )
@@ -287,7 +287,9 @@ extern "C"{ int ThereforeOCI ( double dx, int N_angles ) {
     problem.run_timestep();
 
     //problem.publish_mms();
+
+    //std::cout << "Total time in OCI " << problem.ps.time_conv_loop << std::endl;
     
-    return(0);
+    return( problem.ps.time_conv_loop );
 } //end of main
 } // end of extern function

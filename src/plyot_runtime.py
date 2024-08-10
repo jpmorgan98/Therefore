@@ -13,7 +13,7 @@ Sweep = Sweep[1:,:]
 
 mfp = dx*0.45468
 
-fig, axs = plt.subplots(2, 2)
+fig, axs = plt.subplots(2, 2, constrained_layout=True)
 axs[0, 0].plot(mfp, OCI[:,0], 'k')
 axs[0, 0].plot(mfp, Sweep[:,0], 'b-*')
 axs[0, 0].set_title(r'$S_{4}$')
@@ -39,16 +39,16 @@ for ax in axs.flat:
     ax.set(xlabel=r'mfp [$\Sigma_2 * \Delta x$]', ylabel='wall-clock runtime [s]')
 
 # Hide x labels and tick labels for top plots and y ticks for right plots.
-for ax in axs.flat:
-    ax.label_outer()
+#for ax in axs.flat:
+#    ax.label_outer()
 
-plt.savefig("runtimes.png")
+plt.savefig("runtimes.pdf")
 plt.close()
 
 # Speedup
 
 speedup = Sweep/OCI
-fig, axs = plt.subplots(2, 2)
+fig, axs = plt.subplots(2, 2, constrained_layout=True)
 
 axs[0, 0].plot(mfp, speedup[:,0], 'r-^')
 axs[0, 0].set_title(r'$S_{4}$')
@@ -74,5 +74,5 @@ for ax in axs.flat:
 #for ax in axs.flat:
 #    ax.label_outer()
 
-plt.savefig("speedup.png")
+plt.savefig("speedup.pdf")
 

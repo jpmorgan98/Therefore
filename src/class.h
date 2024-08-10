@@ -47,6 +47,9 @@ class problem_space{
         double L;
         double t_init;
 
+        double time_conv_loop;
+        double av_time_per_itter;
+
         std::vector<double> weights;
         std::vector<double> angles;
 
