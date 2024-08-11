@@ -49,11 +49,14 @@ if (__name__ == '__main__'):
 
     # first value is repeated to allow codes to spool up
     # this time will be removed and not shown
-    dx = np.array([10, 10, 5, 1, .5, .75, .25, .15, .1, .05, .01]).astype(NP_DOUBLE)
-    angles = np.array([4, 8, 16, 32]).astype(NP_INT)
+    #dx = np.array([10, 10, 5, 1, .75, .5, .25, .15, .1, .075, .05, .01]).astype(NP_DOUBLE)
+    #angles = np.array([4, 8, 16, 32]).astype(NP_INT)
 
-    #dx = np.array([10]).astype(NP_DOUBLE)
-    #angles = np.array([4]).astype(NP_INT)
+    #dx = np.array([5]).astype(NP_DOUBLE)
+    #angles = np.array([2]).astype(NP_INT)
+
+    dx = np.array([.1]).astype(NP_DOUBLE)
+    angles = np.array([2]).astype(NP_INT)
 
     #dx = np.array([.1,.05]).astype(NP_DOUBLE)
     N_space = int( dx.size )

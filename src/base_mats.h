@@ -160,7 +160,7 @@ void b_neg_var_win_itteration( std::vector<double> &b, double mu, double af_R, d
     b[3] -= mu*af_hn_R;
 }
 
-
+//cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_LB, af_hn_LB
 std::vector<double> c_pos(cell &cell, int group, double mu, int angle, std::vector<double> &sf, int offset, double af_hl_L, double af_hl_R, double af_LB, double af_hn_LB){
     /*
     hl is previous time step info
@@ -184,10 +184,10 @@ std::vector<double> c_pos(cell &cell, int group, double mu, int angle, std::vect
 
     outofbounds_check(group*group, cell.xsec_g2g_scatter);
  
-    std::vector<double> c_pos ={cell.dx/4*(cell.xsec_g2g_scatter[group*group]*sf[offset+0] + cell.Q[0+helper]) + timer2*af_hl_L + mu*af_LB,
-                                cell.dx/4*(cell.xsec_g2g_scatter[group*group]*sf[offset+1] + cell.Q[1+helper]) + timer2*af_hl_R,
-                                cell.dx/4*(cell.xsec_g2g_scatter[group*group]*sf[offset+2] + cell.Q[2+helper]) + mu*af_hn_LB,
-                                cell.dx/4*(cell.xsec_g2g_scatter[group*group]*sf[offset+3] + cell.Q[3+helper])};
+    std::vector<double> c_pos ={cell.dx/4*(cell.xsec_scatter[group]*sf[offset+0] + cell.Q[0+helper]) + timer2*af_hl_L + mu*af_LB,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+1] + cell.Q[1+helper]) + timer2*af_hl_R,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+2] + cell.Q[2+helper]) + mu*af_hn_LB,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+3] + cell.Q[3+helper])};
 
     return (c_pos);
 }
@@ -219,10 +219,10 @@ std::vector<double> c_neg(cell &cell, int group, double mu, int angle, std::vect
 
     outofbounds_check(group*group, cell.xsec_g2g_scatter);
 
-    std:vector<double> c_neg = {cell.dx/4*(cell.xsec_g2g_scatter[group*group]*sf[offset+0] + cell.Q[0+helper]) + timer2*af_hl_L,
-                                cell.dx/4*(cell.xsec_g2g_scatter[group*group]*sf[offset+1] + cell.Q[1+helper]) + timer2*af_hl_R - mu*af_RB,
-                                cell.dx/4*(cell.xsec_g2g_scatter[group*group]*sf[offset+2] + cell.Q[2+helper]) ,
-                                cell.dx/4*(cell.xsec_g2g_scatter[group*group]*sf[offset+3] + cell.Q[3+helper]) - mu*af_hn_RB};
+    std:vector<double> c_neg = {cell.dx/4*(cell.xsec_scatter[group]*sf[offset+0] + cell.Q[0+helper]) + timer2*af_hl_L,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+1] + cell.Q[1+helper]) + timer2*af_hl_R - mu*af_RB,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+2] + cell.Q[2+helper]) ,
+                                cell.dx/4*(cell.xsec_scatter[group]*sf[offset+3] + cell.Q[3+helper]) - mu*af_hn_RB};
 
     return c_neg;
 }

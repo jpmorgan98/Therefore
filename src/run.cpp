@@ -84,7 +84,7 @@ class run{
 
         void save_eos_data(int t){
             string ext = ".csv";
-            string file_name = "afluxUnsorted";
+            string file_name = "afluxUnsorted_therefore";
             string dt = to_string(t);
 
             file_name = file_name + dt + ext;
@@ -306,13 +306,13 @@ class run{
         void convergenceLoop(std::vector<double> &A, std::vector<double> &b_const, int t){
 
             aflux_last = aflux_previous;
-            converged = true;
+            converged = false;
             itter = 0;
             error = 1.0;
             error_n1 = 1.0;
             error_n2 = 1.0;
 
-            while (converged){
+            while (!converged){
 
                 // lapack requires a copy of data that it uses for row piviot (A after _dgesv != A)
                 std::vector<double> A_copy = A;
@@ -332,8 +332,8 @@ class run{
 
 
                 //Lapack solvers
-                amdGPU_dgesv_strided_batched(A_copy, b, ps);
-                //PBJlinear_solver( A_copy, b );
+                //amdGPU_dgesv_strided_batched(A_copy, b, ps);
+                PBJlinear_solver( A_copy, b );
 
                 //check_close(b, b_copy);
                 
@@ -355,7 +355,7 @@ class run{
                     cout << "       itter: " << itter << endl;
                     cout << "       error: " << error << endl;
                     cout << "" << endl;
-                    converged = false;
+                    converged = true;
                 }
 
                 aflux_last = b;

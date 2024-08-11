@@ -18,20 +18,24 @@ axs[0, 0].plot(mfp, OCI[:,0], 'k')
 axs[0, 0].plot(mfp, Sweep[:,0], 'b-*')
 axs[0, 0].set_title(r'$S_{4}$')
 axs[0, 0].set_yscale('log')
+axs[0, 0].set_xscale('log')
 
 axs[0, 1].plot(mfp, OCI[:,1], 'k')
 axs[0, 1].plot(mfp, Sweep[:,1], 'b-*')
 axs[0, 1].set_title(r'$S_{8}$')
 axs[0, 1].set_yscale('log')
+axs[0, 1].set_xscale('log')
 
 axs[1, 0].plot(mfp, OCI[:,2], 'k')
 axs[1, 0].plot(mfp, Sweep[:,2], 'b-*')
 axs[1, 0].set_title(r'$S_{16}$')
 axs[1, 0].set_yscale('log')
+axs[1, 0].set_xscale('log')
 
 axs[1, 1].plot(mfp, OCI[:,3], 'k')
 axs[1, 1].plot(mfp, Sweep[:,3], 'b-*')
 axs[1, 1].set_yscale('log')
+axs[1, 1].set_xscale('log')
 axs[1, 1].set_title(r'$S_{32}$')
 
 
@@ -52,18 +56,18 @@ fig, axs = plt.subplots(2, 2, constrained_layout=True)
 
 axs[0, 0].plot(mfp, speedup[:,0], 'r-^')
 axs[0, 0].set_title(r'$S_{4}$')
-#axs[0, 0].set_yscale('log')
+axs[0, 0].set_xscale('log')
 
 axs[0, 1].plot(mfp, speedup[:,1], 'r-^')
 axs[0, 1].set_title(r'$S_{8}$')
-#axs[0, 1].set_yscale('log')
+axs[0, 1].set_xscale('log')
 
 axs[1, 0].plot(mfp, speedup[:,2], 'r^-')
 axs[1, 0].set_title(r'$S_{16}$')
-#axs[1, 0].set_yscale('log')
+axs[1, 0].set_xscale('log')
 
 axs[1, 1].plot(mfp, speedup[:,3], 'r-^')
-#axs[1, 1].set_yscale('log')
+axs[1, 1].set_xscale('log')
 axs[1, 1].set_title(r'$S_{32}$')
 
 

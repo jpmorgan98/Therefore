@@ -11,15 +11,15 @@ def group1cont(x,mu,t):
 def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
-N_angles = 24
-N_cells = 100
+N_angles = 2
+N_cells = 1000
 N_groups = 2
 N_time = 1
 
 dt = 0.1
 
-file_name_base = 'afluxUnsorted'
-file_name_base2 = 'mms_sol'
+file_name_base = 'afluxUnsorted_therefore'
+file_name_base2 = 'Sweep_afluxUnsorted'
 file_ext = '.csv'
 
 [angles, weights] = np.polynomial.legendre.leggauss(N_angles)
@@ -47,6 +47,9 @@ sf_mms = np.zeros((N_time*2, N_groups, 2*N_cells))
 af_mms_cont = np.zeros((N_time*2, N_groups, N_angles, 2*N_cells))
 sf_mms_cont = np.zeros((N_time*2, N_groups, 2*N_cells))
 
+
+#np.linalg.norm(af_mms-af_wp, ord=np.inf)
+
 # schuky-duck the angular flux together
 for t in range(N_time):
     # import csv file 
@@ -55,9 +58,15 @@ for t in range(N_time):
     af_raw = af_raw[:,0]
 
     # import mms data
-    #file2 = file_name_base2+str(t)+file_ext
-    #mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
-    #mms_raw = mms_raw[:,0]
+    file2 = file_name_base2+str(t)+file_ext
+    mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
+    mms_raw = mms_raw[:,0]
+
+    print( np.allclose(af_raw, mms_raw) ) 
+    #print()
+    max = np.max(np.abs((af_raw, mms_raw)))
+    print(np.max(np.abs(af_raw-mms_raw)/max))
+    print(np.linalg.norm(af_raw-mms_raw))
 
     if (af_raw.size != SIZE_problem):
         print(">>>ERROR<<<")
@@ -81,7 +90,7 @@ for t in range(N_time):
                 sf_wp[t*2+1,g,2*i]   += weights[n] * af_raw[index_start+2]
                 sf_wp[t*2+1,g,2*i+1] += weights[n] * af_raw[index_start+3]
 
-                '''
+                
                 af_mms[t*2  ,g,n,2*i]   = mms_raw[index_start]
                 af_mms[t*2  ,g,n,2*i+1] = mms_raw[index_start+1]
                 af_mms[t*2+1,g,n,2*i]   = mms_raw[index_start+2]
@@ -92,6 +101,7 @@ for t in range(N_time):
                 sf_mms[t*2+1,g,2*i]   += weights[n] * mms_raw[index_start+2]
                 sf_mms[t*2+1,g,2*i+1] += weights[n] * mms_raw[index_start+3]
 
+                '''
                 mms_cont_raw = np.zeros(4)
                 if (g==0):
                     mms_cont_raw[0] = group1cont(x[i*2], angles[n], t*dt  )
@@ -140,8 +150,15 @@ plt.figure()
 
 
 #plt.plot(x, temp, '+', label='cont')
-plt.plot(x, sf_wp[0,0,:], label='g1 -- no source')
-plt.plot(x, sf_wp[0,1,:], label='g2 -- no source')
+#plt.plot(x, sf_wp[0,0,:], label='g1--oci')
+#plt.plot(x, sf_wp[0,1,:], label='g2 --oci')
+
+plt.plot(x, af_wp[1,0,0,:], label='oci')
+#plt.plot(x, af_mms[1,0,0,:], label='si')
+
+#plt.plot(x, af_mms[0,0,0,:], label='g2 --0')
+#plt.plot(x, af_mms[0,0,1,:], label='g1 --1')
+
 #plt.plot(x[:,0], sf_wp[5,0,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[5,1,:], label='g1 -- no source')
 #plt.plot(x[:,0], sf_wp[7,0,:], label='g1 -- no source')
