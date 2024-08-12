@@ -273,6 +273,9 @@ void A_gen_sparse(std::vector<double> &A, std::vector<cell> cells, problem_space
         
         vector<double> A_c_rm(ps.ELEM_cellBlocks, 0.0);
         A_c_gen(i, A_c_rm, cells, ps);
+        //if (i==1){
+        //    print_rm(A_c_rm);
+        //}
         std::vector<double> A_c_cm = row2colSq(A_c_rm);
 
         int index_start = i*ps.ELEM_cellBlocks;
@@ -430,8 +433,6 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
         }
     }
 
-    //print_rm(A_c);
-
     //down scattering look the same just with an off axis terms
 
     // Scattering looks like row major allined std::vector<doubles> 
@@ -468,8 +469,7 @@ void A_c_gen(int i, std::vector<double> &A_c, std::vector<cell> cells, problem_s
             }
         }
     }
-
-    //print_rm(A_c);
+    
 }
 
 

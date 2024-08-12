@@ -23,7 +23,7 @@ const bool debug_print = false;
 //const bool gpu = false;
 const bool cycle_print = true;
 const bool print_title_card = false;
-const bool save_output = true;
+const bool save_output = false;
 
 
 
@@ -101,10 +101,10 @@ extern "C"{ double ThereforeOCI ( double dx, int N_angles ) {
     vector<double> v = {1, .5};
     vector<double> xsec_total = {1.5454, 0.45468};
     //vector<double> xsec_total = {1, 1};
-    //vector<double> xsec_scatter = {0.61789, 0.38211, .92724, 0.072534};
-    //vector<double> xsec_scatter = {0.61789, 0, 0, 0.072534};
+    vector<double> xsec_scatter = {0.61789, 0.38211, .92724, 0.072534};
+    //vector<double> xsec_scatter = {0.61789, 1, 0, 0.072534};
     //vector<double> xsec_scatter = {0, 0.38211, .92724, 0};
-    vector<double> xsec_scatter = {0,0,0,0};
+    //vector<double> xsec_scatter = {0,0,0,0};
     //double ds = 0.0;
     vector<double> Q = {1, 1, 1, 1, 1, 1, 1, 1};
     //vector<double> Q = {1,0,0,0,0,0,0,0,0};

@@ -9,7 +9,6 @@ bool OPTIMIZED = true;
 // lapack function! To copmile requires <-Ipath/to/lapack/headers -llapack>
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
-
 class run{
 
     public:
@@ -65,7 +64,7 @@ class run{
                 }
         }
 
-        void cycle_print_func(int t){
+        void cycle_print_func( int t, double elapsed ){
             int cycle_print_flag = 0; // for printing headers
 
             if (itter != 0) 
@@ -78,7 +77,7 @@ class run{
                     printf("===================================================================================\n");
                     cycle_print_flag = 1;
                 }
-                printf("%3d      %1.4e    %1.4e    %1.4e   %1.4e \n", itter, error, error_n1, error_n2, spec_rad );
+                printf("%3d      %1.4e    %1.4e    %1.4e   %1.4e    %1.4e\n", itter, error, error_n1, error_n2, spec_rad, elapsed );
             }
         }
 
@@ -106,33 +105,6 @@ class run{
 
             cout << "file saved under: " << file_name << endl;
         }
-
-
-        /*
-        void sourceSource( ){
-            vector<double> temp;
-            for (int i=0; i<ps.N_cells; ++i){
-                //for (int g=0; g<ps.N_groups; g++){ 
-                    for (int j=0; j<ps.N_angles; ++j){
-                        
-                        // group 1
-                        temp = manSource.group1source(cells[i].x, cells[i].dx, time,  ps.dt, ps.angles[j]);
-                        cells[i].Q[8*j  ] = temp[0];
-                        cells[i].Q[8*j+1] = temp[1];
-                        cells[i].Q[8*j+2] = temp[2];
-                        cells[i].Q[8*j+3] = temp[3];
-
-                        // group 2
-                        temp = manSource.group2source(cells[i].x, cells[i].dx, time,  ps.dt, ps.angles[j]);
-                        cells[i].Q[4+8*j  ] = temp[0];
-                        cells[i].Q[4+8*j+1] = temp[1];
-                        cells[i].Q[4+8*j+2] = temp[2];
-                        cells[i].Q[4+8*j+3] = temp[3];
-                    }
-                //}
-            }
-        }*/
-
 
         void linear_solver(vector<double> &A_copy, vector<double> &b){
             /* DO j CALL DEBUGING ONLY
@@ -206,76 +178,20 @@ class run{
                 }
             }
         }
-        /*
-        void publish_mms (){
-
-            std::vector<double> mms_temp(ps.N_mat);
-            std::vector<double> temp(4);
-            int index_start;
-
-            for (int tp=0; tp<ps.N_time; tp++){
-                for (int ip=0; ip<ps.N_cells; ip++){
-                    //for (int gp=0; gp<ps.N_groups; gp++){ //manual override for mms 
-                        for (int jp=0; jp<ps.N_angles; jp++){
-
-                            temp = manSource.group1af(cells[ip].x, cells[ip].dx, ps.dt*tp, ps.dt, ps.angles[jp]);
-                            index_start = (ip*(ps.SIZE_cellBlocks) + 0*(ps.SIZE_groupBlocks) + 4*jp);
-                            mms_temp[index_start] = temp[0];
-                            mms_temp[index_start+1] = temp[1];
-                            mms_temp[index_start+2] = temp[2];
-                            mms_temp[index_start+3] = temp[3];
-
-                            temp = manSource.group2af(cells[ip].x, cells[ip].dx, ps.dt*tp, ps.dt, ps.angles[jp]);
-                            index_start = (ip*(ps.SIZE_cellBlocks) + 1*(ps.SIZE_groupBlocks) + 4*jp);
-                            mms_temp[index_start] = temp[0];
-                            mms_temp[index_start+1] = temp[1];
-                            mms_temp[index_start+2] = temp[2];
-                            mms_temp[index_start+3] = temp[3];
-                        }
-                    //}
-                }
-
-                string ext = ".csv";
-                string file_name = "mms_sol";
-                string dt = to_string(tp);
-
-                file_name = file_name + dt + ext;
-
-                std::ofstream output(file_name);
-                output << "TIME STEP: " << tp << "Unsorted solution vector for mms" << endl;
-                output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl;
-                for (int i=0; i<mms_temp.size(); i++){
-                    output << mms_temp[i] << "," << endl;
-                }
-
-            
-            }
-
-            cout << "time integrated mms solutions published " << endl;
-        }
-        */
 
         void run_timestep(){
 
             init_vectors();
-
-            // generation of the whole ass mat
-            //vector<double> A(ps.N_rm);
-            //A_gen(A, cells, ps);
-            //vector<double> A_col = row2colSq(A);
 
             vector<double> A(ps.ELEM_cellBlocks*ps.N_cells);
             A_gen_sparse(A, cells, ps);
 
             // time step loop
             for(int t=0; t<ps.N_time; ++t){ //
+
                 ps.time_val = t;
                 time += ps.dt;
                 init_af_timestep();
-
-                //if ( ps.mms_bool ){
-                //    sourceSource( );
-                //}
 
                 // resets
                 itter = 0;          // iteration counter
@@ -313,6 +229,8 @@ class run{
             error_n2 = 1.0;
 
             while (!converged){
+
+                Timer timer2;
 
                 // lapack requires a copy of data that it uses for row piviot (A after _dgesv != A)
                 std::vector<double> A_copy = A;
@@ -361,7 +279,7 @@ class run{
                 aflux_last = b;
                 
                 if ( cycle_print )
-                    cycle_print_func( t );
+                    cycle_print_func( t, timer2.elapsed );
                 
                 itter++;
 
@@ -446,6 +364,7 @@ class run{
             // on gpu!
             while (converged){
 
+                Timer timer2;
                 
                 hipMemcpy(daflux_last, &hb[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
                 hipMemcpy(db, &hb_const[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
@@ -458,7 +377,6 @@ class run{
                 
                 //first iteration we solve for the LU decomp in each cell and solve with back subbing
                 // in subsequent iteration we just back substitute as A is already solved for
-                
                 
                 if ( OPTIMIZED ){
                     //std::cout << "OPTIMIZED" << std::endl;
@@ -496,7 +414,7 @@ class run{
                 }
 
                 if (cycle_print)
-                    cycle_print_func(t);
+                    cycle_print_func(t, timer2.elapsed);
 
                 hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
                 aflux_last = hb;
@@ -526,10 +444,5 @@ class run{
             hipFree(dps);
 
             rocblas_destroy_handle(handle);
-
-            
-
-
-            
         }
 };

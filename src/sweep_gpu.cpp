@@ -1,6 +1,6 @@
 #include <iostream>
 #include <vector>
-#include "util.h" // remove when putting in larger file
+#include "util.h"
 #include "base_mats.h"
 #include "legendre.h"
 #include <hip/hip_runtime.h>
@@ -11,10 +11,16 @@ const bool OPTIMIZED = true;
 //compile commands 
 // lockhartt cc sweep.cpp -std=c++20
 // g++ -g -L -llapack
-// hipcc -O3 -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.out
+// compiling on ROCM device hipcc -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o xSweep.out
+
+
+// for profiling:
+// compile with
+// run with
+// view on 
 
 const bool cycle_print = true;
-const bool save_output = true;
+const bool save_output = false;
 
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
@@ -70,6 +76,7 @@ void sb_Axeb(double *A_sp_cm, vector<double> &b, int N_groups, int N_angles){
 
 
 void gpu_sb_nopt_Axeb(double *A_sp_cm, vector<double> &b, int N_groups, int N_angles){
+    // solves a strided batched problem but assumes that nothing is prior allocated
 
     rocblas_int N = 4;           // rows and cols in each household problem
     rocblas_int lda = 4;         // leading dimension of A in each household problem
@@ -83,10 +90,6 @@ void gpu_sb_nopt_Axeb(double *A_sp_cm, vector<double> &b, int N_groups, int N_an
     rocblas_handle handle;
     rocblas_create_handle(&handle);
 
-    // when profiling the funtion 
-    // preload rocBLAS GEMM kernels (optional)
-    // rocblas_initialize();
-
     // defininig pointers to memory on GPU
     double *dA, *db;
     rocblas_int *ipiv, *dinfo;
@@ -98,12 +101,6 @@ void gpu_sb_nopt_Axeb(double *A_sp_cm, vector<double> &b, int N_groups, int N_an
     // integer allocation
     hipMalloc(&ipiv, sizeof(rocblas_int)*strideB*batch_count);  // allocates memory for integer pivot vector in GPU
     hipMalloc(&dinfo, sizeof(rocblas_int)*batch_count);
-
-    //int threadsperblock = 256;
-    //int blockspergrid = (ps.N_mat + (threadsperblock - 1)) / threadsperblock;
-
-    //std::vector<double> hb(ps.N_mat);
-    //std::vector<double> hb_const_check(ps.N_mat);
 
     hipMemcpy(dA, A_sp_cm, sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
     hipMemcpy(db, &b[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
@@ -132,19 +129,7 @@ void gpu_sb_Axeb(double *dA, double *db, int itter, int *ipiv, int *dinfo, int N
     rocblas_stride strideP = 4;  // stride from start of one pivot to the next
     rocblas_int batch_count = N_angles * N_groups;         // number of matricies (in this case number of cells)
 
-    // when profiling the funtion 
-    // preload rocBLAS GEMM kernels (optional)
-    // rocblas_initialize();
-
-    // defininig pointers to memory on GPU
-    //double *dA, *db;
-
     rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
-
-    //hipDeviceSynchronize();
-
-    
-    //solve on gpu
 }
 
 
@@ -155,7 +140,10 @@ void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, st
             if (ps.angles[j] < 0){ // negative sweep
                 for (int i=ps.N_cells; i-- > 0;){ // looping backwards with an unsigned counter
 
+                    // where we are in AF vectors
                     int helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+                    
+                    // SF is stored diffrently then AF
                     int index_sf = (i*4) + (g*4*ps.N_cells);//(i*4*ps.N_groups) + (g*4);
 
                     // index corresponding to this position last time step
@@ -182,11 +170,8 @@ void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, st
 
                     std::vector<double> A_rm = A_neg_rm(cells[i], ps.angles[j], g);
                     std::vector<double> A = row2colSq(A_rm);
-                    //  c_neg(cell cell, int group, double mu, int angle, std::vector<double> sf, int offset, double af_hl_L, double af_hl_R, double af_RB, double af_hn_RB){
+
                     std::vector<double> c = c_neg(cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_RB, af_hn_RB);
-                    
-                    //print_cm(A);
-                    //print_vec_sd(c);
 
                     Axeb(A, c);
 
@@ -198,8 +183,12 @@ void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, st
                 }
             } else if (ps.angles[j] > 0) { // positive sweep
                 for (int i=0; i<ps.N_cells; ++i){
+
+                    // location of where we are on the RHS and AF vectors
                     int helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
-                    int index_sf = (i*4) + (g*4*ps.N_cells); // location in the sf vector of where we are
+
+                    // location in the sf vector of where we are
+                    int index_sf = (i*4) + (g*4*ps.N_cells); 
 
                     outofbounds_check( helper+2, af_prev );
                     outofbounds_check( helper+3, af_prev );
@@ -224,14 +213,8 @@ void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, st
                     std::vector<double> A_rm = A_pos_rm(cells[i], ps.angles[j], g);
                     std::vector<double> A = row2colSq(A_rm);
                     std::vector<double> c = c_pos(cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_LB, af_hn_LB);
-                    //print_vec_sd(cells[i].Q);
 
-                    //std::cout << "c" << std::endl;
-                    //print_vec_sd( c );
                     Axeb(A, c);
-
-                    //std::cout << "x" << std::endl;
-                    //print_vec_sd( c );
 
                     af_last[helper+0] = c[0];
                     af_last[helper+1] = c[1];
@@ -245,6 +228,7 @@ void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, st
 
 void build_A_si(int i, int i_n, double *A_cell, std::vector<cell> &cells, problem_space &ps){
     // outputs a set of N_angle*N_group strided batched 4*4 matrices for a given cell
+
     for ( int g=0; g<ps.N_groups; ++g){
         for (int j=0; j<ps.N_angles; ++j){
             std::vector<double> A_c_g_a;
@@ -267,6 +251,8 @@ void build_A_si(int i, int i_n, double *A_cell, std::vector<cell> &cells, proble
 
 
 void build_A_fullproblem(std::vector<double> &A, std::vector<cell> &cells, problem_space &ps){
+    //builds A for sweeps in every angle, cell and group
+
     int N_elements_cell = 16 * ps.N_groups * ps.N_angles;
     for (int i=0; i<ps.N_cells; ++i){
         int i_n = ps.N_cells-1 - i; // index for the negative sweeps
@@ -280,8 +266,14 @@ void build_b_si(int i, int i_n, std::vector<double> &b, std::vector<double> &af_
         for ( int j=0; j<ps.N_angles; ++j ){
 
             if (ps.angles[j] < 0){ // negative sweep
+
+                // location of where we are on the RHS and AF vectors
                 int helper =  (i_n*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+
+                // where we are in the scalar flux vector (tied to cell location)
                 int index_sf = (i_n*4) + (g*4*ps.N_cells);
+
+                // local helper for the RHS b vector
                 int local_helper = (g*4*ps.N_angles) + 4*j;
 
                 double af_hl_L = af_prev[helper + 2];
@@ -310,8 +302,14 @@ void build_b_si(int i, int i_n, std::vector<double> &b, std::vector<double> &af_
                 b[local_helper+3] = c[3];
 
             } else if (ps.angles[j] > 0) { // positive sweep
+
+                // location of where we are on AF vectors
                 int helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+
+                // where we are in the scalar flux vector (tied to cell location)
                 int index_sf = (i*4) + (g*4*ps.N_cells);
+
+                // local helper for the RHS b vector
                 int local_helper = (g*4*ps.N_angles) + 4*j;
 
                 double af_hl_L = af_prev[helper + 2];
@@ -344,15 +342,17 @@ void build_b_si(int i, int i_n, std::vector<double> &b, std::vector<double> &af_
 }
 
 void resort (int i, int i_n, std::vector<double> &af_last, std::vector<double> b, std::vector<cell> &cells, problem_space &ps){
+    // moving 
+
     for ( int g=0; g<ps.N_groups; ++g ){
         for ( int m=0; m<ps.N_angles; ++m ){
 
             int local_helper = (g*4*ps.N_angles) + 4*m;
             int helper;
 
-            if (ps.angles[m] < 0){ // negative sweep
+            if (ps.angles[m] < 0){ // negative sweep values
                 helper =  (i_n*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m);
-            } else if (ps.angles[m] > 0) {
+            } else if (ps.angles[m] > 0) { // positive sweep values
                 helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m);
             }
 
@@ -364,12 +364,9 @@ void resort (int i, int i_n, std::vector<double> &af_last, std::vector<double> b
     }
 }
 
-//af_new, af_previous, sf_new, cells, ps
-
 void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
-    //int size = 4 * ps.N_groups * ps.N_angles; // N_g*N_a mat
-
-    //std::vector<double> A_cell (16 * ps.N_groups * ps.N_angles);
+    // sweep the problem batching all angles and groups within a cell
+    // can be executed on a GPU or CPU
 
     std::vector<double> A (16 * ps.N_groups * ps.N_angles * ps.N_cells);
 
@@ -382,20 +379,11 @@ void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, s
     for (int i=0; i<ps.N_cells; ++i){
         int i_n = ps.N_cells-1 - i; // index for the negative sweeps
         
-        //build A for Cell for all group and angle within cell
-        //build_A_si( i, i_n, &A_cell[0], cells, ps );
-
-        //print_cm_sp(A_cell, 0, 4);
-
         //build b for Cell all group and angle within cell
         build_b_si( i, i_n, b_cell, af_last, af_prev, sf, cells, ps );
 
-        //print_vec_sd(b_cell);
-
         //solve for x in Ax=b
         gpu_sb_nopt_Axeb( &A[N_elements_cell*i], b_cell, ps.N_groups, ps.N_angles );
-
-        //sb_Axeb(&A[N_elements_cell*i], b_cell, ps.N_groups, ps.N_angles);
 
         //resort
         resort( i, i_n, af_last, b_cell, cells, ps );
@@ -403,38 +391,28 @@ void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, s
 }
 
 
-void sweep_batched_gpu(int itter, double* dA, std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
-    //int size = 4 * ps.N_groups * ps.N_angles; // N_g*N_a mat
+void sweep_batched_gpu(rocblas_handle handle, int itter, double* dA, std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
+    // do a transport sweep such that the whole thing happens on the GPU
 
-    rocblas_int N = 4;           // rows and cols in each household problem
-    rocblas_int lda = 4;         // leading dimension of A in each household problem
-    rocblas_int ldb = 4;         // leading dimension of B in each household problem
-    rocblas_int nrhs = 1;                         // number of nrhs in each household problem
+    rocblas_int N = 4;            // rows and cols in each household problem
+    rocblas_int lda = 4;          // leading dimension of A in each household problem
+    rocblas_int ldb = 4;          // leading dimension of B in each household problem
+    rocblas_int nrhs = 1;         // number of nrhs in each household problem
     rocblas_stride strideA = 16;  // stride from start of one matrix to the next (household to the next)
-    rocblas_stride strideB = 4;  // stride from start of one rhs to the next
-    rocblas_stride strideP = 4;  // stride from start of one pivot to the next
+    rocblas_stride strideB = 4;   // stride from start of one rhs to the next
+    rocblas_stride strideP = 4;   // stride from start of one pivot to the next
     rocblas_int batch_count = ps.N_angles * ps.N_groups;         // number of matricies (in this case number of cells)
 
-    //print_cm_sp(A, ps.SIZE_cellBlocks, 4);
     int N_elements_cell = 16 * ps.N_groups * ps.N_angles;
 
     int N_mats = ps.N_angles * ps.N_groups;
-
-    //hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
 
     double *db;
     hipMalloc(&db, sizeof(double)*4*N_mats);         // allocates memory for strided rhs container
 
     rocblas_int *ipiv, *dinfo;
     hipMalloc(&ipiv, sizeof(rocblas_int)*4*N_mats);  // allocates memory for integer pivot vector in GPU
-    hipMalloc(&dinfo, sizeof(rocblas_int)*N_mats);
-
-    rocblas_handle handle;
-    rocblas_create_handle(&handle);
-
-    //if ( !OPTIMIZED ){
-    //    hipMemcpy(dA, &A[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
-    //}
+    hipMalloc(&dinfo, sizeof(rocblas_int)*N_mats);   // allocates memory for info (if anything goes wrong)
 
     //int threadsperblock = 256;
     //int blockspergrid = (ps.N_mat + (threadsperblock - 1)) / threadsperblock;
@@ -443,43 +421,29 @@ void sweep_batched_gpu(int itter, double* dA, std::vector<double> &af_last, std:
 
     for (int i=0; i<ps.N_cells; ++i){
 
-        int i_n = ps.N_cells-1 - i; // index for the negative sweeps
+        // index for the negative sweeps
+        int i_n = ps.N_cells-1 - i; 
+
+        // build b for Cell all group and angle within cell
+        s( i, i_n, b_cell, af_last, af_prev, sf, cells, ps );
         
-        //build A for Cell for all group and angle within cell
-        //build_A_si( i, i_n, A_cell, cells, ps );
-
-        //print_cm_sp(A_cell, 0, 4);
-
-        //build b for Cell all group and angle within cell
-        build_b_si( i, i_n, b_cell, af_last, af_prev, sf, cells, ps );
-
-        //print_vec_sd(b_cell);
-
+        // copying b for a given vector
         hipMemcpy( db, &b_cell[0], sizeof(double)*4*N_mats, hipMemcpyHostToDevice );
 
-        //solve for x in Ax=b
-        //gpu_sb_Axeb( &dA[N_elements_cell*i], db, ipiv, dinfo, ps.N_groups, ps.N_angles, handle );
-
-
         if ( OPTIMIZED ){
-        //std::cout << "OPTIMIZED" << std::endl;
             if (itter == 0){
                 rocsolver_dgesv_strided_batched(handle, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
                 hipDeviceSynchronize();
             } else {
-                //enum rocblas_operation_none;
                 rocsolver_dgetrs_strided_batched(handle, rocblas_operation_none, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, batch_count);
                 hipDeviceSynchronize();
             } 
         } else {
-            //std::cout << "NOT OPTIMIZED" << std::endl;
             rocsolver_dgesv_strided_batched(handle, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
             hipDeviceSynchronize();
         }
 
-
-        //sb_Axeb(A_cell, b_cell, ps.N_groups, ps.N_angles);
-
+        // soultion vector back form the device
         hipMemcpy( &b_cell[0], db, sizeof(double)*4*N_mats, hipMemcpyDeviceToHost );
 
         //resort
@@ -489,119 +453,7 @@ void sweep_batched_gpu(int itter, double* dA, std::vector<double> &af_last, std:
     hipFree(ipiv);
     hipFree(dinfo);
     hipFree(db);
-
-    rocblas_destroy_handle( handle );
 }
-
-/*
-void sweep_gpu(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<double> A, std::vector<cell> &cells, problem_space ps){
-
-    // perameters
-    rocblas_int N = 4;           // rows and cols in each household problem
-    rocblas_int lda = 4;         // leading dimension of A in each household problem
-    rocblas_int ldb = 4;         // leading dimension of B in each household problem
-    rocblas_int nrhs = 1;                         // number of nrhs in each household problem
-    rocblas_stride strideA = 8;  // stride from start of one matrix to the next (household to the next)
-    rocblas_stride strideB = 4;  // stride from start of one rhs to the next
-    rocblas_stride strideP = 4;  // stride from start of one pivot to the next
-    rocblas_int batch_count = ps.N_angles * ps.N_groups;         // number of matricies (in this case number of cells)
-
-    rocblas_handle handle;
-    rocblas_create_handle(&handle);
-
-    // when profiling the funtion 
-    // preload rocBLAS GEMM kernels (optional)
-    // rocblas_initialize();
-
-    std::vector<double> herror (3);
-    std::vector<int> probSpace {ps.N_cells, ps.N_groups, ps.N_angles};
-
-    print_vec_sd_int(probSpace);
-
-    // defininig pointers to memory on GPU
-    double *dA, *db, *dangles, *dboundary, *daflux_last, *db_const;
-    rocblas_int *ipiv, *dinfo;
-    int *dps;  // without further inreration
-
-    // double alloaction of problem
-    hipMalloc(&dA, sizeof(double)*strideA*batch_count);         // allocates memory for strided matrix container
-    hipMalloc(&db, sizeof(double)*strideB*batch_count);         // allocates memory for strided rhs container
-    hipMalloc(&daflux_last, sizeof(double)*strideB*batch_count);
-    hipMalloc(&dangles, sizeof(double)*ps.N_angles);
-    hipMalloc(&dboundary, sizeof(double)*ps.N_angles*ps.N_groups*2);
-
-    // integer allocation
-    hipMalloc(&ipiv, sizeof(rocblas_int)*strideB*batch_count);  // allocates memory for integer pivot vector in GPU
-    hipMalloc(&dinfo, sizeof(rocblas_int)*batch_count);
-    hipMalloc(&dps, sizeof(int)*3);
-
-    // copy data to GPU
-    hipMemcpy(daflux_last, &aflux_previous[0], sizeof(double)*ps.N_mat, hipMemcpyHostToDevice);
-    hipMemcpy(dangles, &ps.angles[0], sizeof(double)*ps.N_angles, hipMemcpyHostToDevice);
-    hipMemcpy(dps, &probSpace[0], sizeof(int)*3, hipMemcpyHostToDevice);
-
-    itter = 0;
-
-    //int threadsperblock = 256;
-    //int blockspergrid = (ps.N_mat + (threadsperblock - 1)) / threadsperblock;
-
-    std::vector<double> hb(ps.N_mat);
-    std::vector<double> hb_const_check(ps.N_mat);
-
-    hipMemcpy(dA, &hA[0], sizeof(double)*strideA*batch_count, hipMemcpyHostToDevice);
-    hipMemcpy(daflux_last, &hb[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
-    hipMemcpy(db, &hb_const[0], sizeof(double)*strideB*batch_count, hipMemcpyHostToDevice);
-
-    rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
-    hipDeviceSynchronize();
-
-    // warning! daflux_last is in-out!
-    error = gpuL2norm(handle, daflux_last, db, ps.N_mat);
-    hipDeviceSynchronize();
-
-    // on cpu
-    spec_rad = pow( pow(error+error_n1,2), .5) / pow(pow(error_n1+error_n2, 2), 0.5);
-
-    if (itter > 2){
-        if ( error < ps.convergence_tolerance ){ converged = false; } } //*(1-spec_rad)
-
-    if (itter >= ps.max_iteration){
-                    cout << ">>>WARNING: Computation did not converge after " << ps.max_iteration << "iterations<<<" << endl;
-                    cout << "       itter: " << itter << endl;
-                    cout << "       error: " << error << endl;
-                    cout << "" << endl;
-                    converged = false;
-    }
-
-    cycle_print_func(t);
-
-    hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-    aflux_last = hb;
-    
-    itter++;
-
-    error_n2 = error_n1;
-    error_n1 = error;
-
-
-        hipMemcpy(&aflux_previous[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
-
-        hipFree(ipiv);
-        hipFree(dinfo);
-        hipFree(dA);
-        hipFree(db);
-        hipFree(daflux_last);
-        hipFree(dangles);
-        hipFree(dboundary);
-        hipFree(db_const);
-        hipFree(dps);
-        //solve on gpu
-
-
-    }
-}
-
-*/
 
 
 void quadrature(std::vector<double> &angles, std::vector<double> &weights){
@@ -628,7 +480,7 @@ void quadrature(std::vector<double> &angles, std::vector<double> &weights){
 void computeSF(std::vector<double> &af, std::vector<double> &sf, problem_space &ps){
     // a reduction over angle
 
-    //zeroing out the SF which will be accumulated
+    // zeroing out the SF which will be accumulated
     std::fill(sf.begin(), sf.end(), 0.0);
 
     for (int i=0; i<ps.N_cells; ++i){
@@ -677,6 +529,16 @@ void compute_g2g(std::vector<cell> &cells, std::vector<double> &sf, problem_spac
 
     // First two for loops are over all group to group scattering matrix
     // these are mostly reduction commands, should use that when heading to GPU if needing to offload
+
+    // Scattering looks like row major allined std::vector<doubles> 
+    // g->g'
+    //     _       g'       _
+    //    | 0->0  0->1  0->2 |  fastest
+    //  g | 1->0  1->1  1->2 |     |
+    //    | 2->0  2->1  2->2 |     \/
+    //    -                 -   slowest
+    //  Thus the diagnol is the within group scttering
+
     for (int i=0; i<ps.N_groups; ++i){ // g
         for (int j=0; j<ps.N_groups; ++j){ // g'
 
@@ -697,10 +559,10 @@ void compute_g2g(std::vector<cell> &cells, std::vector<double> &sf, problem_spac
                     outofbounds_check(c*4*ps.N_groups + i*4 + 2, sf);
                     outofbounds_check(c*4*ps.N_groups + i*4 + 3, sf);
 
-                    cells[c].Q[4*i+0] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf];
-                    cells[c].Q[4*i+1] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf];
-                    cells[c].Q[4*i+2] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf];
-                    cells[c].Q[4*i+3] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf];
+                    cells[c].Q[4*i+0] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+0];
+                    cells[c].Q[4*i+1] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+1];
+                    cells[c].Q[4*i+2] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+2];
+                    cells[c].Q[4*i+3] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+3];
 
                 }
             } else {
@@ -723,54 +585,50 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
     double error_n1 = 0.5;
     double error_n2 = 0.5;
     double spec_rad = 0;
-    //std::vector<double> af_last(ps.N_mat);
+
     std::vector<double> sf_new(ps.ELEM_sf);
     std::vector<double> sf_last(ps.ELEM_sf);
 
     computeSF( af_previous, sf_new, ps );
 
-    //std::vector<double> af_2(af_new.size());
-
     //build_A
-    //std::vector<double> A (16 * ps.N_groups * ps.N_angles * ps.N_cells);
+    std::vector<double> A (16 * ps.N_groups * ps.N_angles * ps.N_cells);
     
-    //build_A_fullproblem(A, cells, ps);
-    //double *dA;
-    //hipMalloc(&dA, sizeof(double)*A.size());         // allocates memory for strided matrix container
-    //hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
-    //double *dA;
-    //hipMalloc(&dA, sizeof(double)*A.size());         // allocates memory for strided matrix container
-    //hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
+    build_A_fullproblem(A, cells, ps);
+    double *dA;
+    hipMalloc(&dA, sizeof(double)*A.size());         // allocates memory for strided matrix container
+    hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
 
+    rocblas_handle handle;
+    rocblas_create_handle(&handle);
 
     Timer timer;
 
     while (converged){
 
+        Timer timer2;
+
         // communicate energy!
         compute_g2g( cells, sf_new, ps );
 
+        
+        // A is in/out for LAPACK functions
+        // If we are not going to use the out in an optmiized fassion we need to communicate
+        // A every itteration. If it is optimized we only solve it once then do back sub
+        if ( !OPTIMIZED ){
+            hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
+        }
+
         //af_2 = af_new;
-
-        //if ( !OPTIMIZED ){
-        //    hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
-        //}
-
-        //std::fill(af_new.begin(), af_new.end(), 0.0);
-
-        sweep_normal(af_new, af_previous, sf_new, cells, ps );
-        //sweep_batched_gpu( itter, dA, af_new, af_previous, sf_new, cells, ps );
+        //sweep_normal( af_new, af_previous, sf_new, cells, ps );
+        sweep_batched_gpu( handle, itter, dA, af_new, af_previous, sf_new, cells, ps );
         //sweep_batched( af_2, af_previous, sf_new, cells, ps );
-
-        //print_vec_sd(af_new);
-        //print_vec_sd(af_2);
-
         //check_close(af_new, af_2);
 
         // compute scalar fluxes
         computeSF( af_new, sf_new, ps );
 
-        // compute the L2 norm between the last and current iteration
+        // compute the inf norm between the last and current iteration
         error = infNorm_error( sf_last, sf_new );
 
         // compute spectral radius
@@ -784,7 +642,7 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
             if ( sf_last == sf_new ) { 
                 std::cout << ">>> Sweep solutions where exactly the same within double precision" << std::endl;
                 converged = false; 
-                } 
+                }
         }
         if (itter >= ps.max_iteration){
             cout << ">>>WARNING: Computation did not converge after " << ps.max_iteration << " iterations <<<" << endl;
@@ -793,14 +651,7 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
             cout << "" << endl;
             converged = false;
         }
-        
 
-        //std::cout << "af_new" << std::endl;
-        //print_vec_sd(af_new);
-        //std::cout << "sf_new" << std::endl;
-        //print_vec_sd(sf_new);
-
-        //af_last = af_new;
         sf_last = sf_new;
 
         error_n2 = error_n1;
@@ -817,29 +668,24 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
 
             if (cycle_print_flag == 0) {
                 cout << ">>>CYCLE INFO FOR TIME STEP: " << t <<"<<<"<< endl;
-                printf("cycle   error         error_n1      error_n2     spec_rad   cycle_time\n");
+                printf("cycle   error         error_n1      error_n2     spec_rad     cycle_time\n");
                 printf("===================================================================================\n");
                 cycle_print_flag = 1;
             }
-            printf("%3d      %1.4e    %1.4e    %1.4e   %1.4e \n", itter, error, error_n1, error_n2, spec_rad );
+            printf("%3d      %1.4e    %1.4e    %1.4e   %1.4e   %1.4e \n", itter, error, error_n1, error_n2, spec_rad, timer2.elapsed() );
         }
 
         itter++;
-        
-        //std::cout << "" <<std::endl;
-        //std::cout << "af last" <<std::endl;
-        //print_vec_sd(af_new);
-        //std::cout << "" <<std::endl;
-        //std::cout << "af new" <<std::endl;
-        //print_vec_sd(af_new);
 
-    } // end while loop
+    } // end while convergence loop
 
-    //hipFree(dA);
+    //destorying A allocations
+    hipFree(dA);
+    rocblas_destroy_handle( handle );
+
+    // timer functions
     ps.time_conv_loop = timer.elapsed();
     ps.av_time_per_itter = timer.elapsed()/itter-1;
-
-    //std::cout << "Time elapsed in SI transport only: " << timer.elapsed() << " seconds\n";
 
 
 } // end convergence function
@@ -932,14 +778,14 @@ extern "C"{ double ThereforeSweep ( double dx, int N_angles ) {
     
     // problem definition
     // eventually from an input deck
-    //double dx = 10;
-    //int N_angles = 4;
+    //double dx = .1;
+    //int N_angles = 32;
 
     double dt = 0.1;
     vector<double> v = {1, .5};
     vector<double> xsec_total = {1.5454, 0.45468};
-    //vector<double> xsec_scatter = {0.61789, 0.072534};
-    vector<double> xsec_scatter = {0,0};
+    vector<double> xsec_scatter = {0.61789, 0.072534};
+    //vector<double> xsec_scatter = {0,0};
     //double ds = 0.0;
     vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
@@ -1019,9 +865,9 @@ extern "C"{ double ThereforeSweep ( double dx, int N_angles ) {
         cellCon.v = v;
         cellCon.dt = dt;
         cellCon.material_source = material_source;
-        //cellCon.xsec_g2g_scatter = vector<double> {0, .38211, .92747, 0};
+        cellCon.xsec_g2g_scatter = vector<double> {0, .38211, .92724, 0};
         //cellCon.xsec_g2g_scatter = vector<double> {0, .92747,.38211,  0};
-        cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 0};
+        //cellCon.xsec_g2g_scatter = vector<double> {0, 1, 0, 0};
 
         //vector<double> temp (N_angles*N_groups*4, 1.0);
         //for (int p=0; p<temp.size(); ++p){temp[p] = Q[0];}
@@ -1036,13 +882,8 @@ extern "C"{ double ThereforeSweep ( double dx, int N_angles ) {
 
     std::vector<double> af_previous(N_mat, 0);
 
-    //std::cout << "entering conv loop" <<std::endl;
-
     timeLoop(af_previous, cells, ps);
-    //std::cout << "done" << std::endl;
-
-    //std::cout << "transport sweeps in c++ " << ps.time_conv_loop << std::endl;
 
     return(ps.time_conv_loop);
-}
+} // end of main
 } // end of extern function

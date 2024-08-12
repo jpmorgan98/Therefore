@@ -201,21 +201,33 @@ void compute_g2g(std::vector<cell> &cells, std::vector<double> &sf, problem_spac
             outofbounds_check(2*g+0, cells[c].material_source);
             outofbounds_check(2*g+1, cells[c].material_source);
 
-            cells[c].Q[4*g+0] = cells[c].material_source[4*g+0];
-            cells[c].Q[4*g+1] = cells[c].material_source[4*g+1];
-            cells[c].Q[4*g+2] = cells[c].material_source[4*g+2];
-            cells[c].Q[4*g+3] = cells[c].material_source[4*g+3];
+            cells[c].Q[4*g+0] = cells[c].material_source[2*g+0];
+            cells[c].Q[4*g+1] = cells[c].material_source[2*g+0];
+            cells[c].Q[4*g+2] = cells[c].material_source[2*g+1];
+            cells[c].Q[4*g+3] = cells[c].material_source[2*g+1];
         }
         
     }
 
     // First two for loops are over all group to group scattering matrix
     // these are mostly reduction commands, should use that when heading to GPU if needing to offload
+
+    // Scattering looks like row major allined std::vector<doubles> 
+    // g->g'
+    //     _       g'       _
+    //    | 0->0  0->1  0->2 |  fastest
+    //  g | 1->0  1->1  1->2 |     |
+    //    | 2->0  2->1  2->2 |     \/
+    //    -                 -   slowest
+    //  Thus the diagnol is the within group scttering
+
     for (int i=0; i<ps.N_groups; ++i){ // g
         for (int j=0; j<ps.N_groups; ++j){ // g'
 
             if (i != j){
                 for (int c=0; c<ps.N_cells; ++c){ // across cells
+
+                    int index_sf = (c*4) + (j*4*ps.N_cells);
 
                     outofbounds_check(4*j+0, cells[c].Q);
                     outofbounds_check(4*j+1, cells[c].Q);
@@ -229,10 +241,10 @@ void compute_g2g(std::vector<cell> &cells, std::vector<double> &sf, problem_spac
                     outofbounds_check(c*4*ps.N_groups + i*4 + 2, sf);
                     outofbounds_check(c*4*ps.N_groups + i*4 + 3, sf);
 
-                    cells[c].Q[4*i+0] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[c*4*ps.N_groups + j*4 + 0];
-                    cells[c].Q[4*i+1] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[c*4*ps.N_groups + j*4 + 1];
-                    cells[c].Q[4*i+2] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[c*4*ps.N_groups + j*4 + 2];
-                    cells[c].Q[4*i+3] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[c*4*ps.N_groups + j*4 + 3];
+                    cells[c].Q[4*i+0] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+0];
+                    cells[c].Q[4*i+1] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+1];
+                    cells[c].Q[4*i+2] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+2];
+                    cells[c].Q[4*i+3] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+3];
 
                 }
             } else {

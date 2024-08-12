@@ -153,8 +153,18 @@ plt.figure()
 #plt.plot(x, sf_wp[0,0,:], label='g1--oci')
 #plt.plot(x, sf_wp[0,1,:], label='g2 --oci')
 
-plt.plot(x, af_wp[1,0,0,:], label='oci')
-#plt.plot(x, af_mms[1,0,0,:], label='si')
+plt.plot(x, af_wp[0,0,0,:], label='oci')
+plt.plot(x, af_mms[0,0,0,:], label='si')
+
+plt.plot(x, af_wp[0,0,1,:], label='oci')
+plt.plot(x, af_mms[0,0,1,:], label='si')
+
+plt.plot(x, af_wp[0,1,0,:], label='oci')
+plt.plot(x, af_mms[0,1,0,:], label='si')
+
+plt.plot(x, af_wp[0,1,1,:], label='oci')
+plt.plot(x, af_mms[0,1,1,:], label='si')
+
 
 #plt.plot(x, af_mms[0,0,0,:], label='g2 --0')
 #plt.plot(x, af_mms[0,0,1,:], label='g1 --1')

@@ -16,8 +16,8 @@ file_name = 'runtimes'
 
 def compile():
     compCommand = []
-    compCommand.append('hipcc -fPIC -shared -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
-    compCommand.append('hipcc -fPIC -shared -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.so')
+    compCommand.append('hipcc -fPIC -O3 -shared -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack therefore.cpp -o Therefore.so')
+    compCommand.append('hipcc -fPIC -O3 -shared -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o Sweep.so')
     #-fopenmp
     print('compiling therefore and sweep')
 
@@ -49,14 +49,14 @@ if (__name__ == '__main__'):
 
     # first value is repeated to allow codes to spool up
     # this time will be removed and not shown
-    #dx = np.array([10, 10, 5, 1, .75, .5, .25, .15, .1, .075, .05, .01]).astype(NP_DOUBLE)
-    #angles = np.array([4, 8, 16, 32]).astype(NP_INT)
+    dx = np.array([10, 10, 5, 1, .75, .5, .25, .15, .1, .075, .05, .01]).astype(NP_DOUBLE)
+    angles = np.array([4, 8, 16, 32]).astype(NP_INT)
 
     #dx = np.array([5]).astype(NP_DOUBLE)
     #angles = np.array([2]).astype(NP_INT)
 
-    dx = np.array([.1]).astype(NP_DOUBLE)
-    angles = np.array([2]).astype(NP_INT)
+    #dx = np.array([.1]).astype(NP_DOUBLE)
+    #angles = np.array([2]).astype(NP_INT)
 
     #dx = np.array([.1,.05]).astype(NP_DOUBLE)
     N_space = int( dx.size )
