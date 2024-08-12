@@ -15,9 +15,9 @@ const bool OPTIMIZED = true;
 
 
 // for profiling:
-// compile with
-// run with
-// view on 
+    // compile with hipcc -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o xSweep.out
+    // run with rocprof --hip-trace ./xSweep.out
+    // view on https://ui.perfetto.dev
 
 const bool cycle_print = true;
 const bool save_output = false;
@@ -341,7 +341,196 @@ void build_b_si(int i, int i_n, std::vector<double> &b, std::vector<double> &af_
     }
 }
 
-void resort (int i, int i_n, std::vector<double> &af_last, std::vector<double> b, std::vector<cell> &cells, problem_space &ps){
+
+void build_b_const_win_sweep(std::vector<double> &b, std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
+    for ( int i=0; i<ps.N_cells; ++i){
+        // index for the negative sweeps
+        int i_n = ps.N_cells-1 - i; 
+        for ( int g=0; g<ps.N_groups; ++g ){
+            for ( int j=0; j<ps.N_angles; ++j ){
+
+                if (ps.angles[j] < 0){ // negative sweep
+
+                    // location of where we are on the RHS and AF vectors
+                    int helper =  (i_n*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+
+                    // where we are in the scalar flux vector (tied to cell location)
+                    int index_sf = (i_n*4) + (g*4*ps.N_cells);
+
+                    // local helper for the RHS b vector
+                    int local_helper = (g*4*ps.N_angles) + 4*j;
+
+                    double af_hl_L = af_prev[helper + 2];
+                    double af_hl_R = af_prev[helper + 3];
+
+                    std::vector<double> c = c_neg_const_win_sweep(cells[i_n], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R);
+
+                    b[local_helper+0] = c[0];
+                    b[local_helper+1] = c[1];
+                    b[local_helper+2] = c[2];
+                    b[local_helper+3] = c[3];
+
+                } else if (ps.angles[j] > 0) { // positive sweep
+
+                    // location of where we are on AF vectors
+                    int helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+
+                    // where we are in the scalar flux vector (tied to cell location)
+                    int index_sf = (i*4) + (g*4*ps.N_cells);
+
+                    // local helper for the RHS b vector
+                    int local_helper = (g*4*ps.N_angles) + 4*j;
+
+                    double af_hl_L = af_prev[helper + 2];
+                    double af_hl_R = af_prev[helper + 3];
+
+                    std::vector<double> c = c_pos_const_win_sweep(cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R);
+
+                    b[local_helper+0] = c[0];
+                    b[local_helper+1] = c[1];
+                    b[local_helper+2] = c[2];
+                    b[local_helper+3] = c[3];
+                }
+            }
+        }
+    }
+}
+
+
+void cpu_b_var_win_sweep(int i, int i_n, std::vector<double> &b, std::vector<double> &af_last, problem_space &ps){
+    for ( int g=0; g<ps.N_groups; ++g ){
+        for ( int j=0; j<ps.N_angles; ++j ){
+
+            if (ps.angles[j] < 0){ // negative sweep
+
+                // location of where we are on the RHS and AF vectors
+                int helper =  (i_n*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+
+                // where we are in the scalar flux vector (tied to cell location)
+                int index_sf = (i_n*4) + (g*4*ps.N_cells);
+
+                // local helper for the RHS b vector
+                int local_helper = (g*4*ps.N_angles) + 4*j;
+
+                double af_RB;
+                double af_hn_RB;
+
+                if ( i_n == ps.N_cells - 1 ){
+                    af_RB    = 0; // BCr[angle]
+                    af_hn_RB = 0; // BCr[angle]
+                } else {
+                    outofbounds_check(((i_n+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 0, af_last);
+                    outofbounds_check(((i_n+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 2, af_last);
+
+                    af_RB    = af_last[((i_n+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 0];
+                    af_hn_RB = af_last[((i_n+1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 2];
+                }
+
+                b[local_helper+1] -= af_RB*ps.angles[j];
+                b[local_helper+3] -= af_hn_RB*ps.angles[j];
+
+            } else if (ps.angles[j] > 0) { // positive sweep
+
+                // location of where we are on AF vectors
+                int helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j);
+
+                // where we are in the scalar flux vector (tied to cell location)
+                int index_sf = (i*4) + (g*4*ps.N_cells);
+
+                // local helper for the RHS b vector
+                int local_helper = (g*4*ps.N_angles) + 4*j;
+
+                double af_LB;
+                double af_hn_LB;
+
+                if ( i == 0 ){
+
+                    af_LB    = 0; // BCr[angle]
+                    af_hn_LB = 0; // BCr[angle]
+
+                } else {
+                    outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 1, af_last );
+                    outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 3, af_last );
+
+                    af_LB     = af_last[((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 1];
+                    af_hn_LB  = af_last[((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 3];
+                }
+
+                b[local_helper+0] += af_LB*ps.angles[j];
+                b[local_helper+2] += af_hn_LB*ps.angles[j];
+            }
+        }
+    }
+}
+
+__global__ void gpu_b_var_win_sweep(int i, int i_n, double *b, double *angles, int N_cells, int N_angles, int N_groups){
+    int j = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    int SIZE_cellBlocks = N_angles*N_groups*4;
+    int SIZE_groupBlocks = N_angles*4;
+
+    if (j<N_angles){
+        for  (int g=0; g<N_groups; ++g){
+            if (angles[j] < 0){ // negative sweep
+
+                // location of where we are on the RHS and AF vectors
+                int helper =  (i_n*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j);
+
+                // where we are in the scalar flux vector (tied to cell location)
+                int index_sf = (i_n*4) + (g*4*N_cells);
+
+                // local helper for the RHS b vector
+                int local_helper = (g*4*N_angles) + 4*j;
+
+                double af_RB;
+                double af_hn_RB;
+
+                if ( i_n == N_cells - 1 ){
+                    af_RB    = 0; // BCr[angle]
+                    af_hn_RB = 0; // BCr[angle]
+                } else {
+
+                    af_RB    = b[((i_n+1)*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j) + 0];
+                    af_hn_RB = b[((i_n+1)*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j) + 2];
+                }
+
+                b[local_helper+1] -= af_RB*angles[j];
+                b[local_helper+3] -= af_hn_RB*angles[j];
+
+            } else if (angles[j] > 0) { // positive sweep
+
+                // location of where we are on AF vectors
+                int helper =  (i*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j);
+
+                // where we are in the scalar flux vector (tied to cell location)
+                int index_sf = (i*4) + (g*4*N_cells);
+
+                // local helper for the RHS b vector
+                int local_helper = (g*4*N_angles) + 4*j;
+
+                double af_LB;
+                double af_hn_LB;
+
+                if ( i == 0 ){
+
+                    af_LB    = 0; // BCr[angle]
+                    af_hn_LB = 0; // BCr[angle]
+
+                } else {
+
+                    af_LB     = b[((i-1)*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j) + 1];
+                    af_hn_LB  = b[((i-1)*(SIZE_cellBlocks) + g*(SIZE_groupBlocks) + 4*j) + 3];
+                }
+
+                b[local_helper+0] += af_LB*angles[j];
+                b[local_helper+2] += af_hn_LB*angles[j];
+            }
+        }
+    }
+}
+
+
+
+void resort (int i, int i_n, std::vector<double> &af_last, double *b, std::vector<cell> &cells, problem_space &ps){
     // moving 
 
     for ( int g=0; g<ps.N_groups; ++g ){
@@ -386,7 +575,7 @@ void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, s
         gpu_sb_nopt_Axeb( &A[N_elements_cell*i], b_cell, ps.N_groups, ps.N_angles );
 
         //resort
-        resort( i, i_n, af_last, b_cell, cells, ps );
+        resort( i, i_n, af_last, &b_cell[0], cells, ps );
     }
 }
 
@@ -407,52 +596,61 @@ void sweep_batched_gpu(rocblas_handle handle, int itter, double* dA, std::vector
 
     int N_mats = ps.N_angles * ps.N_groups;
 
-    double *db;
-    hipMalloc(&db, sizeof(double)*4*N_mats);         // allocates memory for strided rhs container
+    double *db, *dangles;
+    hipMalloc(&db, sizeof(double)*4*N_mats*ps.N_cells);         // allocates memory for strided rhs container
+    hipMalloc(&dangles, sizeof(double)*4*N_mats*ps.N_cells);
+    hipMemcpy( dangles, &ps.angles[0], sizeof(double)*ps.N_angles, hipMemcpyHostToDevice );
 
     rocblas_int *ipiv, *dinfo;
     hipMalloc(&ipiv, sizeof(rocblas_int)*4*N_mats);  // allocates memory for integer pivot vector in GPU
     hipMalloc(&dinfo, sizeof(rocblas_int)*N_mats);   // allocates memory for info (if anything goes wrong)
 
-    //int threadsperblock = 256;
-    //int blockspergrid = (ps.N_mat + (threadsperblock - 1)) / threadsperblock;
+    int threadsperblock = 256;
+    int blockspergrid = (ps.N_angles + (threadsperblock - 1)) / threadsperblock;
 
-    std::vector<double> b_cell (4 * ps.N_groups * ps.N_angles);
+    std::vector<double> b (4 * ps.N_groups * ps.N_angles * ps.N_cells);
 
+    build_b_const_win_sweep(b, af_last, af_prev, sf, cells, ps);
+    hipMemcpy( db, &b[4*N_mats*ps.N_cells], sizeof(double)*4*N_mats, hipMemcpyHostToDevice );
+
+    // everything on a GPU!
     for (int i=0; i<ps.N_cells; ++i){
 
-        // index for the negative sweeps
         int i_n = ps.N_cells-1 - i; 
 
         // build b for Cell all group and angle within cell
-        s( i, i_n, b_cell, af_last, af_prev, sf, cells, ps );
+        hipLaunchKernelGGL(gpu_b_var_win_sweep, dim3(blockspergrid), dim3(threadsperblock), 0, 0, 
+                                    i, i_n, db, dangles, ps.N_cells, ps.N_angles, ps.N_groups );
+        hipDeviceSynchronize();
         
         // copying b for a given vector
-        hipMemcpy( db, &b_cell[0], sizeof(double)*4*N_mats, hipMemcpyHostToDevice );
 
         if ( OPTIMIZED ){
             if (itter == 0){
-                rocsolver_dgesv_strided_batched(handle, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
+                rocsolver_dgesv_strided_batched(handle, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, &db[4*N_mats*i], ldb, strideB, dinfo, batch_count);
                 hipDeviceSynchronize();
             } else {
-                rocsolver_dgetrs_strided_batched(handle, rocblas_operation_none, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, batch_count);
+                rocsolver_dgetrs_strided_batched(handle, rocblas_operation_none, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, &db[4*N_mats*i], ldb, strideB, batch_count);
                 hipDeviceSynchronize();
             } 
         } else {
-            rocsolver_dgesv_strided_batched(handle, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
+            rocsolver_dgesv_strided_batched(handle, N, nrhs, &dA[N_elements_cell*i], lda, strideA, ipiv, strideP, &db[4*N_mats*i], ldb, strideB, dinfo, batch_count);
             hipDeviceSynchronize();
         }
 
         // soultion vector back form the device
-        hipMemcpy( &b_cell[0], db, sizeof(double)*4*N_mats, hipMemcpyDeviceToHost );
+        //hipMemcpy( &b[4*N_mats*i], db, sizeof(double)*4*N_mats, hipMemcpyDeviceToHost );
 
         //resort
-        resort( i, i_n, af_last, b_cell, cells, ps );
+        //resort( i, i_n, af_last, &b[4*N_mats*i], cells, ps );
     }
+
+    hipMemcpy( &af_last[0], db, sizeof(double)*4*N_mats*ps.N_cells, hipMemcpyDeviceToHost );
 
     hipFree(ipiv);
     hipFree(dinfo);
     hipFree(db);
+    hipFree(dangles);
 }
 
 
@@ -789,7 +987,7 @@ extern "C"{ double ThereforeSweep ( double dx, int N_angles ) {
     //double ds = 0.0;
     vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
-    double Length = 100;
+    double Length = 1;
     double IC_homo = 0;
     
     int N_cells = int(Length/dx); //int N_cells = 100; //10
