@@ -23,7 +23,7 @@ const bool debug_print = false;
 //const bool gpu = false;
 const bool cycle_print = true;
 const bool print_title_card = false;
-const bool save_output = false;
+const bool save_output = true;
 
 
 
@@ -109,7 +109,7 @@ extern "C"{ double ThereforeOCI ( double dx, int N_angles ) {
     vector<double> Q = {1, 1, 1, 1, 1, 1, 1, 1};
     //vector<double> Q = {1,0,0,0,0,0,0,0,0};
 
-    double Length = 100;
+    double Length = 1;
     double IC_homo = 0;
     
     int N_cells = int(Length/dx); //10

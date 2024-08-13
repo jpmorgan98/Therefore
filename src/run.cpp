@@ -279,7 +279,7 @@ class run{
                 aflux_last = b;
                 
                 if ( cycle_print )
-                    cycle_print_func( t, timer2.elapsed );
+                    cycle_print_func( t, timer2.elapsed() );
                 
                 itter++;
 
@@ -414,7 +414,7 @@ class run{
                 }
 
                 if (cycle_print)
-                    cycle_print_func(t, timer2.elapsed);
+                    cycle_print_func(t, timer2.elapsed() );
 
                 hipMemcpy(&hb[0], db, sizeof(double)*ps.N_mat, hipMemcpyDeviceToHost);
                 aflux_last = hb;
