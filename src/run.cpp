@@ -72,7 +72,7 @@ class run{
 
             if (cycle_print){
                 if (cycle_print_flag == 0) {
-                    cout << ">>>CYCLE INFO FOR TIME STEP: " << t <<"<<<"<< endl;
+                    cout << ">>>OCI CYCLE INFO FOR TIME STEP: " << t <<" for dt: " << ps.dt << "<<<"<< endl;
                     printf("cycle   error         error_n1      error_n2     spec_rad   cycle_time\n");
                     printf("===================================================================================\n");
                     cycle_print_flag = 1;

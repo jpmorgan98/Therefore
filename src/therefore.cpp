@@ -23,7 +23,7 @@ const bool debug_print = false;
 //const bool gpu = false;
 const bool cycle_print = true;
 const bool print_title_card = false;
-const bool save_output = true;
+const bool save_output = false;
 
 
 
@@ -86,7 +86,7 @@ void eosPrint(ts_solutions state);
 // i space, m is angle, k is time, g is energy group
 
 //int main(void){
-extern "C"{ double ThereforeOCI ( double dx, int N_angles ) {
+extern "C"{ double ThereforeOCI ( double dx, double dt, int N_angles ) {
 //int main(){
 
     if ( print_title_card )
@@ -96,8 +96,9 @@ extern "C"{ double ThereforeOCI ( double dx, int N_angles ) {
     
     // problem definition
     // eventually from an input deck
-    // double dx = .01;
-    double dt = 0.1;
+    //double dx = .05;
+    //int N_angles = 16;
+    //double dt = 0.1;
     vector<double> v = {1, .5};
     vector<double> xsec_total = {1.5454, 0.45468};
     //vector<double> xsec_total = {1, 1};
@@ -109,7 +110,7 @@ extern "C"{ double ThereforeOCI ( double dx, int N_angles ) {
     vector<double> Q = {1, 1, 1, 1, 1, 1, 1, 1};
     //vector<double> Q = {1,0,0,0,0,0,0,0,0};
 
-    double Length = 1;
+    double Length = 100;
     double IC_homo = 0;
     
     int N_cells = int(Length/dx); //10

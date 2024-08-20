@@ -20,7 +20,7 @@ const bool OPTIMIZED = true;
     // view on https://ui.perfetto.dev
 
 const bool cycle_print = true;
-const bool save_output = true;
+const bool save_output = false;
 
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
@@ -855,8 +855,7 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
 
         sf_last = sf_new;
 
-        error_n2 = error_n1;
-        error_n1 = error;
+        
 
         if (cycle_print){
             // CYCLE PRINTING
@@ -868,14 +867,16 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
             int t = 0;
 
             if (cycle_print_flag == 0) {
-                cout << ">>>CYCLE INFO FOR TIME STEP: " << t <<"<<<"<< endl;
+                cout << ">>>SI CYCLE INFO FOR TIME STEP: " << t <<" for dt: " << ps.dt << "<<<"<< endl;
                 printf("cycle   error         error_n1      error_n2     spec_rad     cycle_time\n");
                 printf("===================================================================================\n");
                 cycle_print_flag = 1;
             }
             printf("%3d      %1.4e    %1.4e    %1.4e   %1.4e   %1.4e \n", itter, error, error_n1, error_n2, spec_rad, timer2.elapsed() );
         }
-
+        
+        error_n2 = error_n1;
+        error_n1 = error;
         itter++;
 
     } // end while convergence loop
@@ -973,7 +974,7 @@ void timeLoop(std::vector<double> af_previous, std::vector<cell> &cells, problem
 
 
 //int main(){
-extern "C"{ double ThereforeSweep ( double dx, int N_angles ) {
+extern "C"{ double ThereforeSweep ( double dx, double dt, int N_angles ) {
     // testing function
 
     using namespace std;
@@ -983,7 +984,7 @@ extern "C"{ double ThereforeSweep ( double dx, int N_angles ) {
     //double dx = .05;
     //int N_angles = 16;
 
-    double dt = 0.1;
+    //double dt = 0.1;
     vector<double> v = {1, .5};
     vector<double> xsec_total = {1.5454, 0.45468};
     vector<double> xsec_scatter = {0.61789, 0.072534};
@@ -991,7 +992,7 @@ extern "C"{ double ThereforeSweep ( double dx, int N_angles ) {
     //double ds = 0.0;
     vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
-    double Length = 1;
+    double Length = 100;
     double IC_homo = 0;
     
     int N_cells = int(Length/dx); //int N_cells = 100; //10
