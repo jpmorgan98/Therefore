@@ -8,6 +8,27 @@ import math
 # group 1 is the fast group 2 is the slow
 # to evaluate intergrals go to https://www.integral-calculator.com/
 
+def sort(af_unsorted, N_cells, N_groups, N_angles):
+    af = np.zeros((2, N_groups, N_angles, 2*N_cells))
+    sf = np.zeros((2, N_groups, 2*N_cells))
+    for g in range(N_groups):
+        for i in range(N_cells):
+            for m in range(N_angles):
+                helper =  (i*(N_groups*N_angles*4) + g*(4*N_angles) + 4*m)
+
+                af[0, g, m, 2*i  ] = af_unsorted[helper + 0]
+                af[0, g, m, 2*i+1] = af_unsorted[helper + 1]
+                af[1, g, m, 2*i  ] = af_unsorted[helper + 2]
+                af[1, g, m, 2*i+1] = af_unsorted[helper + 3]
+
+                sf[0, g, 2*i  ] += weights[m] * af_unsorted[helper + 0]
+                sf[0, g, 2*i+1] += weights[m] * af_unsorted[helper + 1]
+                sf[1, g, 2*i  ] += weights[m] * af_unsorted[helper + 2]
+                sf[1, g, 2*i+1] += weights[m] * af_unsorted[helper + 3]
+
+    return(af)
+
+
 if __name__ == '__main__':
 
     # Independent variables
@@ -187,7 +208,70 @@ if __name__ == '__main__':
     print()
     print()
 
+    #### Python function output
+
+    mms_out =  open("mms_auto2.py", "w")
+    print("import numpy as np", file=mms_out)
+    print("", file=mms_out)
+    print("# File auto generated", file=mms_out)
+    print("", file=mms_out)
+
+    print("def Q1(v1, v2, Sigma_1, Sigma_2, mu, Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, x_j, Deltax, t_k, Deltat):", file=mms_out)
+    print("", file=mms_out)
+    print("   Q1_vals = np.zeros(4)", file=mms_out)
+    print("", file=mms_out)
+    print("   Q1_vals[0] = ", Q1_Lint_timeav, "", file=mms_out)
+    print("   Q1_vals[1] = ", Q1_Rint_timeav, "", file=mms_out)
+    print("   Q1_vals[2] = ", Q1_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
+    print("   Q1_vals[3] = ", Q1_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
+    print("", file=mms_out)
+    print("   return( Q1_vals )", file=mms_out)
+    print("", file=mms_out)
+    print("", file=mms_out)
+    print("def Q2(v1, v2, Sigma_1, Sigma_2, mu, Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, x_j, Deltax, t_k, Deltat):", file=mms_out)
+    print("", file=mms_out)
+    print("   Q2_vals = np.zeros(4)", file=mms_out)
+    print("", file=mms_out)
+    print("   Q2_vals[0] = ", Q2_Lint_timeav, "", file=mms_out)
+    print("   Q2_vals[1] = ", Q2_Rint_timeav, "", file=mms_out)
+    print("   Q2_vals[2] = ", Q2_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
+    print("   Q2_vals[3] = ", Q2_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
+    print("", file=mms_out)
+    print("   return( Q2_vals )", file=mms_out)
+    print("", file=mms_out)
+    print("", file=mms_out)
+    print("", file=mms_out)
+
+    print("def af1(mu, t_k, Deltat, x_j, Deltax):", file=mms_out)
+    print("", file=mms_out)
+    print("   af1_vals = np.zeros(4)", file=mms_out)
+    print("", file=mms_out)
+    print("   af1_vals[0] = ", AF1_Lint_timeav, "", file=mms_out)
+    print("   af1_vals[1] = ", AF1_Rint_timeav, "", file=mms_out)
+    print("   af1_vals[2] = ", AF1_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
+    print("   af1_vals[3] = ", AF1_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
+    print("", file=mms_out)
+    print("   return( af1_vals )", file=mms_out)
+    print("", file=mms_out)
+    print("", file=mms_out)
+    print("def af2(mu, t_k, Deltat, x_j, Deltax):", file=mms_out)
+    print("", file=mms_out)
+    print("   af2_vals = np.zeros(4)", file=mms_out)
+    print("", file=mms_out)
+    print("   af2_vals[0] = ", AF2_Lint_timeav, "", file=mms_out)
+    print("   af2_vals[1] = ", AF2_Rint_timeav, "", file=mms_out)
+    print("   af2_vals[2] = ", AF2_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
+    print("   af2_vals[3] = ", AF2_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
+    print("", file=mms_out)
+    print("   return( af2_vals )", file=mms_out)
+    print("", file=mms_out)
+    print("", file=mms_out)
+    mms_out.close
+
+
     #### C++ function output
+
+    '''
 
     mms_out =  open("mms_auto2.h", "w")
     print("#include <iostream>", file=mms_out)
@@ -247,7 +331,7 @@ if __name__ == '__main__':
     print("", file=mms_out)
     mms_out.close
 
-
+    '''
 
     AF1_Lint_timeav_func = sym.lambdify((x_j, Deltax, t_k, Deltat, mu),  AF1_Lint_timeav, "numpy")
     AF1_Rint_timeav_func = sym.lambdify((x_j, Deltax, t_k, Deltat, mu),  AF1_Rint_timeav, "numpy")
@@ -264,74 +348,94 @@ if __name__ == '__main__':
 
     [angles, weights] = np.polynomial.legendre.leggauss(N_angle)
     #angles = np.array((-.57735, .57735))
-    N_cell = 10
-    dx = .2
-    space_center = np.linspace(0,N_cell*dx, N_cell)
+    N_cell = 4
+    dx = .1
+    space_center = np.arange(dx/2,(N_cell)*dx, dx)
+    print(space_center)
     space_plot = np.linspace(0,N_cell*dx, 2*N_cell)
-    cell_step = 3/N_cell
+    #dx = 3/N_cell
     N_time = 1
-    dt = .3
-    time = np.linspace (0,dt*N_time, N_time)
+    dt = .1
+    time = np.arange(0,dt*N_time, dt)
+
+    print(time)
     
     time_step = 5/N_time
 
     af = np.zeros((2*N_time, 2, N_angle, 2*N_cell))
+    Q = np.zeros((2*N_time, 2, N_angle, 2*N_cell))
 
     af_long = np.zeros((2*N_time * 2 * N_angle * 2*N_cell))
 
     sf = np.zeros((2*N_time, 2, 2*N_cell))
 
     for t in range(N_time):
+        print(t, time[t])
         for i in range(N_cell):
             for m in range(N_angle):
 
-                #print(AF1_Lint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m]))
-                af[2*t, 0, m, 2*i  ] = AF1_Lint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                af[2*t, 0, m, 2*i+1] = AF1_Rint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                #print(AF1_Lint_timeav_func(space_center[i], dx, time[t], time_step, angles[m]))
+                af[2*t, 0, m, 2*i  ] = AF1_Lint_timeav_func(space_center[i], dx, time[t], dt, angles[m])
+                af[2*t, 0, m, 2*i+1] = AF1_Rint_timeav_func(space_center[i], dx, time[t], dt, angles[m])
 
-                #print(AF1_Lint_func(space_center[i], cell_step, time[t], time_step, angles[m]))
-                af[2*t+1, 0, m, 2*i  ] = AF1_Lint_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                af[2*t+1, 0, m, 2*i+1] = AF1_Rint_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                #print(AF1_Lint_func(space_center[i], dx, time[t], time_step, angles[m]))
+                af[2*t+1, 0, m, 2*i  ] = AF1_Lint_func(space_center[i], dx, time[t], dt, angles[m])
+                af[2*t+1, 0, m, 2*i+1] = AF1_Rint_func(space_center[i], dx, time[t], dt, angles[m])
 
-                af[2*t, 1, m, 2*i  ] = AF2_Lint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                af[2*t, 1, m, 2*i+1] = AF2_Rint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                af[2*t, 1, m, 2*i  ] = AF2_Lint_timeav_func(space_center[i], dx, time[t], dt, angles[m])
+                af[2*t, 1, m, 2*i+1] = AF2_Rint_timeav_func(space_center[i], dx, time[t], dt, angles[m])
 
-                af[2*t+1, 1, m, 2*i  ] = AF2_Lint_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                af[2*t+1, 1, m, 2*i+1] = AF2_Rint_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                af[2*t+1, 1, m, 2*i  ] = AF2_Lint_func(space_center[i], dx, time[t], dt, angles[m])
+                af[2*t+1, 1, m, 2*i+1] = AF2_Rint_func(space_center[i], dx, time[t], dt, angles[m])
 
+                #Q[2*t, 0, m, 2*i  ]   = (space_center[i], dx, time[t], time_step, angles[m])
+                #Q[2*t, 0, m, 2*i+1]   = (space_center[i], dx, time[t], time_step, angles[m])
+                #Q[2*t+1, 0, m, 2*i  ] = (space_center[i], dx, time[t], time_step, angles[m])
+                #Q[2*t+1, 0, m, 2*i+1] = (space_center[i], dx, time[t], time_step, angles[m])
+                #Q[2*t, 1, m, 2*i  ]   = (space_center[i], dx, time[t], time_step, angles[m])
+                #Q[2*t, 1, m, 2*i+1]   = (space_center[i], dx, time[t], time_step, angles[m])
+                #Q[2*t+1, 1, m, 2*i  ] = (space_center[i], dx, time[t], time_step, angles[m])
+                #Q[2*t+1, 1, m, 2*i+1] = (space_center[i], dx, time[t], time_step, angles[m])
 
-                sf[2*t, 0, 2*i  ] += weights[m] * AF1_Lint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                sf[2*t, 0, 2*i+1] += weights[m] * AF1_Rint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                sf[2*t, 0, 2*i  ] += weights[m] * AF1_Lint_timeav_func(space_center[i], dx, time[t], time_step, angles[m])
+                sf[2*t, 0, 2*i+1] += weights[m] * AF1_Rint_timeav_func(space_center[i], dx, time[t], time_step, angles[m])
 
-                #print(AF1_Lint_func(space_center[i], cell_step, time[t], time_step, angles[m]))
-                sf[2*t+1, 0, 2*i  ] += weights[m] * AF1_Lint_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                sf[2*t+1, 0, 2*i+1] = weights[m] * AF1_Rint_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                #print(AF1_Lint_func(space_center[i], dx, time[t], time_step, angles[m]))
+                sf[2*t+1, 0, 2*i  ] += weights[m] * AF1_Lint_func(space_center[i], dx, time[t], time_step, angles[m])
+                sf[2*t+1, 0, 2*i+1] = weights[m] * AF1_Rint_func(space_center[i], dx, time[t], time_step, angles[m])
 
-                sf[2*t, 1, 2*i  ] += weights[m] * AF2_Lint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                sf[2*t, 1, 2*i+1] += weights[m] * AF2_Rint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                sf[2*t, 1, 2*i  ] += weights[m] * AF2_Lint_timeav_func(space_center[i], dx, time[t], time_step, angles[m])
+                sf[2*t, 1, 2*i+1] += weights[m] * AF2_Rint_timeav_func(space_center[i], dx, time[t], time_step, angles[m])
 
-                sf[2*t+1, 1, 2*i  ] += weights[m] * AF2_Lint_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                sf[2*t+1, 1, 2*i+1] += weights[m] * AF2_Rint_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                sf[2*t+1, 1, 2*i  ] += weights[m] * AF2_Lint_func(space_center[i], dx, time[t], time_step, angles[m])
+                sf[2*t+1, 1, 2*i+1] += weights[m] * AF2_Rint_func(space_center[i], dx, time[t], time_step, angles[m])
 
                 for g in range(2):
-                    helper = 4*i*2*N_angle + 4*g*N_angle + 4*m
+                    helper = 4*N_angle*2*N_cell*t + 4*i*2*N_angle + 4*g*N_angle + 4*m
+                    #(j*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m)
                     if g==0:
-                        af_long[helper+0] = AF1_Lint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                        af_long[helper+1] = AF1_Rint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                        af_long[helper+2] = AF1_Lint_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                        af_long[helper+3] = AF1_Rint_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                        print(space_center[i], dx, time[t], dt, angles[m])
+                        af_long[helper+0] = AF1_Lint_timeav_func(space_center[i], dx, time[t], dt, angles[m])
+                        af_long[helper+1] = AF1_Rint_timeav_func(space_center[i], dx, time[t], dt, angles[m])
+                        af_long[helper+2] = AF1_Lint_func(space_center[i], dx, time[t], dt, angles[m])
+                        af_long[helper+3] = AF1_Rint_func(space_center[i], dx, time[t], dt, angles[m])
                     elif g==1:
-                        af_long[helper+0] = AF2_Lint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                        af_long[helper+1] = AF2_Rint_timeav_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                        af_long[helper+2] = AF2_Lint_func(space_center[i], cell_step, time[t], time_step, angles[m])
-                        af_long[helper+3] = AF2_Rint_func(space_center[i], cell_step, time[t], time_step, angles[m])
+                        af_long[helper+0] = AF2_Lint_timeav_func(space_center[i], dx, time[t], dt, angles[m])
+                        af_long[helper+1] = AF2_Rint_timeav_func(space_center[i], dx, time[t], dt, angles[m])
+                        af_long[helper+2] = AF2_Lint_func(space_center[i], dx, time[t], dt, angles[m])
+                        af_long[helper+3] = AF2_Rint_func(space_center[i], dx, time[t], dt, angles[m])
 
+    af_n = sort(af_long, N_cell, 2, N_angle)
+
+
+    print(af)
+    print(af.size)
     # Flux - average
     fig = plt.figure()
-    plt.plot(space_plot, sf[0,0,:])
-    plt.plot(space_plot, sf[0,1,:])
+    plt.plot(space_plot, af[0, 0, 0, :  ])
+    plt.plot(space_plot, af_n[0, 0, 0, :  ])
+    #plt.plot(space_plot, af[1, 0, 0, :  ])
+    #plt.plot(space_plot, af[1, 0, 1, :  ])
     plt.show()
 
-    print (af_long)
-
-    print(angles)
+    print(af_long)

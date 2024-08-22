@@ -1,6 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mms_auto2 import Q1, Q2, af1, af2
 
+"""
+The intention of this file is to be as self sufficient as possible when running the method of manufactured solutions
+It does this via sweeping, OCI can then be verified by converging to source iterations to within a convergence tol
+"""
 
 class problem_space:
     # physical space
@@ -64,10 +69,31 @@ class cell:
     dx = None
     dt = None
 
-def A_neg(dx, v, dt, mu, xsec_total):
-    gamma = (dx*xsec_total)/2
-    timer = dx/(v*dt)
-    timer2 = dx/(2*v*dt)
+def sort(af_unsorted, ps):
+    af = np.zeros((2, ps.N_groups, ps.N_angles, 2*ps.N_cells))
+    sf = np.zeros((2, ps.N_groups, 2*ps.N_cells))
+    for g in range(ps.N_groups):
+        for i in range(ps.N_cells):
+            for m in range(ps.N_angles):
+                helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m)
+
+                af[0, g, m, 2*i  ] = af_unsorted[helper + 0]
+                af[0, g, m, 2*i+1] = af_unsorted[helper + 1]
+                af[1, g, m, 2*i  ] = af_unsorted[helper + 2]
+                af[1, g, m, 2*i+1] = af_unsorted[helper + 3]
+
+                sf[0, g, 2*i  ] += weights[m] * af_unsorted[helper + 0]
+                sf[0, g, 2*i+1] += weights[m] * af_unsorted[helper + 1]
+                sf[1, g, 2*i  ] += weights[m] * af_unsorted[helper + 2]
+                sf[1, g, 2*i+1] += weights[m] * af_unsorted[helper + 3]
+
+    return(af, sf)
+
+
+def A_neg(cell, mu, g):
+    gamma = (cell.dx*cell.xsec_total[g])/2
+    timer = cell.dx/(cell.v[g]*cell.dt)
+    timer2 = cell.dx/(2*cell.v[g]*cell.dt)
     a = mu/2
 
     A_n = np.array([[-a + gamma, a,          timer2,            0],
@@ -79,10 +105,10 @@ def A_neg(dx, v, dt, mu, xsec_total):
 
 
 
-def A_pos(dx, v, dt, mu, xsec_total):
-    gamma = (dx*xsec_total)/2
-    timer = dx/(v*dt)
-    timer2 = dx/(2*v*dt)
+def A_pos(cell, mu, g):
+    gamma = (cell.dx*cell.xsec_total[g])/2
+    timer = cell.dx/(cell.v[g]*cell.dt)
+    timer2 = cell.dx/(2*cell.v[g]*cell.dt)
     a = mu/2
 
     A_p = np.array([[a + gamma, a,         timer2,            0],
@@ -92,31 +118,36 @@ def A_pos(dx, v, dt, mu, xsec_total):
 
     return(A_p)
 
-def c_pos(dx, v, dt, mu, Ql, Qr, Q_halfNext_L, Q_halfNext_R, psi_halfLast_L, psi_halfLast_R, psi_leftBound, psi_halfNext_leftBound, xsec_scatter, phi_L, phi_R, phi_halfNext_L, phi_halfNext_R):
-    timer2 = dx/(2*v*dt)
+def c_pos(cell, group, mu, angle, sf, Q, offset, af_hl_L, af_hl_R, af_LB, af_hn_LB):
+    timer2 = cell.dx/(2*cell.v[group] * cell.dt)
+    helper = group*4
 
-    b_p = np.array([[dx/4*(xsec_scatter*phi_L + Ql) + timer2*psi_halfLast_L + mu*psi_leftBound],
-                    [dx/4*(xsec_scatter*phi_R + Qr) + timer2*psi_halfLast_R],
-                    [dx/4*(xsec_scatter*phi_halfNext_L + Q_halfNext_L) + mu*psi_halfNext_leftBound],
-                    [dx/4*(xsec_scatter*phi_halfNext_R + Q_halfNext_R)]])
+    c_pos = np.array([cell.dx/1*(cell.xsec_scatter[group]*sf[offset+0] + Q[0+offset]) + timer2*af_hl_L + mu*af_LB,
+                      cell.dx/1*(cell.xsec_scatter[group]*sf[offset+1] + Q[1+offset]) + timer2*af_hl_R,
+                      cell.dx/1*(cell.xsec_scatter[group]*sf[offset+2] + Q[2+offset]) + mu*af_hn_LB,
+                      cell.dx/1*(cell.xsec_scatter[group]*sf[offset+3] + Q[3+offset])])
 
-    return(b_p)
+    return(c_pos)
 
-def c_neg(dx, v, dt, mu, Ql, Qr, Q_halfNext_L, Q_halfNext_R, psi_halfLast_L, psi_halfLast_R, psi_rightBound, psi_halfNext_rightBound, xsec_scatter, phi_L, phi_R, phi_halfNext_L, phi_halfNext_R):
-    timer2 = dx/(2*v*dt)
+def c_neg(cell, group, mu, angle, sf, Q, offset, af_hl_L, af_hl_R, af_RB, af_hn_RB):
+    timer2 = cell.dx/(2*cell.v[group] * cell.dt)
+    helper = group*4
 
-    b_n = np.array([[dx/4*(xsec_scatter*phi_L + Ql) + timer2*psi_halfLast_L],
-                    [dx/4*(xsec_scatter*phi_R + Qr) + timer2*psi_halfLast_R - mu*psi_rightBound],
-                    [dx/4*(xsec_scatter*phi_halfNext_L + Q_halfNext_L) ],
-                    [dx/4*(xsec_scatter*phi_halfNext_R + Q_halfNext_R) - mu*psi_halfNext_rightBound]])
+    c_neg = np.array([cell.dx/1*(cell.xsec_scatter[group]*sf[offset+0] + Q[0+offset]) + timer2*af_hl_L,
+                      cell.dx/1*(cell.xsec_scatter[group]*sf[offset+1] + Q[1+offset]) + timer2*af_hl_R - mu*af_RB,
+                      cell.dx/1*(cell.xsec_scatter[group]*sf[offset+2] + Q[2+offset]) ,
+                      cell.dx/1*(cell.xsec_scatter[group]*sf[offset+3] + Q[3+offset]) - mu*af_hn_RB])
 
-    return(b_n)
+    return(c_neg)
 
-def sweep(af_last, af_prev, sf, cells, ps):
+
+
+
+def sweep(af_last, af_prev, sf, Q, cells, ps):
     for j in range(ps.N_angles):
         for g in range(ps.N_groups):
-            if (ps.angles[j] < 0) # negative sweep
-                for i in range(ps.N_cells, 0, -1) #(int i=ps.N_cells i-- > 0) # looping backwards with an unsigned counter
+            if (ps.angles[j] < 0): # negative sweep
+                for i in range(ps.N_cells-1, -1, -1): #(int i=ps.N_cells i-- > 0) # looping backwards with an unsigned counter
 
                     helper =  (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j)
                     index_sf = (i*4) + (g*4*ps.N_cells)
@@ -127,13 +158,13 @@ def sweep(af_last, af_prev, sf, cells, ps):
                     if ( i == ps.N_cells - 1 ):
                         #std::cout << "BC right" << std::endl
                         if (g==0):
-                            temp = AF_g1(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx)
+                            temp = af1(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx)
                         elif(g==1):
-                            temp = AF_g2(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx)
+                            temp = af2(ps.angles[j], ps.time_val, ps.dt, cells[i].x+cells[i].dx, cells[i].dx)
                         else:
                             print( "MMS is only 2 group (negative sweep bc)" )
                         
-                        af_RB = temp[0]
+                        af_RB    = temp[0]
                         af_hn_RB = temp[2] # BCr[angle]
 
                     else:
@@ -143,9 +174,9 @@ def sweep(af_last, af_prev, sf, cells, ps):
                     A = A_neg(cells[i], ps.angles[j], g)
                     #A = row2colSq(A_rm)
                     #  c_neg(cell cell, int group, double mu, int angle, std::vector<double> sf, int offset, double af_hl_L, double af_hl_R, double af_RB, double af_hn_RB){
-                    c = c_neg(cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_RB, af_hn_RB)
+                    c = c_neg(cells[i], g, ps.angles[j], j, sf, Q, index_sf, af_hl_L, af_hl_R, af_RB, af_hn_RB)
 
-                    np.linalg.solve(A, c)
+                    c = np.linalg.solve(A, c)
 
                     #print_cm(c)
 
@@ -165,61 +196,54 @@ def sweep(af_last, af_prev, sf, cells, ps):
 
                     if (i == 0): #LHS boundary condition
                         if (g==0):
-                            temp = AF_g1(ps.angles[j], ps.time_val, ps.dt, cells[i].x-cells[i].dx, cells[i].dx)
+                            #print(cells[i].x-cells[i].dx)
+                            temp = af1(ps.angles[j], ps.time_val, ps.dt, cells[i].x-cells[i].dx, cells[i].dx)
                         elif(g==1):
-                            temp = AF_g2(ps.angles[j], ps.time_val, ps.dt, cells[i].x-cells[i].dx, cells[i].dx)
+                            temp = af2(ps.angles[j], ps.time_val, ps.dt, cells[i].x-cells[i].dx, cells[i].dx)
                             #print_vec_sd(temp)
                         else :
                             print( "MMS is only 2 group (negative sweep bc)" )
-                        af_LB = temp[1]
+                        #print(temp)
+                        af_LB    = temp[1]
                         af_hn_LB = temp[3]
                     else:
                         af_LB     = af_last[((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 1]
                         af_hn_LB  = af_last[((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 3]
 
                     A = A_pos(cells[i], ps.angles[j], g)
-                    c = c_pos(cells[i], g, ps.angles[j], j, sf, index_sf, af_hl_L, af_hl_R, af_LB, af_hn_LB)
+                    c = c_pos(cells[i], g, ps.angles[j], j, sf, Q, index_sf, af_hl_L, af_hl_R, af_LB, af_hn_LB)
                     
-                    #std::cout << "c" << std::endl
-                    #print_vec_sd( c )
-                    temp = np.linalg.solve(A, c)
+                    c = np.linalg.solve(A, c)
 
                     #print_vec_sd(c)
 
                     #std::cout << "x" << std::endl
                     #print_vec_sd( c )
 
-                    af_last[helper+0] = temp[0]
-                    af_last[helper+1] = temp[1]
-                    af_last[helper+2] = temp[2]
-                    af_last[helper+3] = temp[3]
+                    af_last[helper+0] = c[0]
+                    af_last[helper+1] = c[1]
+                    af_last[helper+2] = c[2]
+                    af_last[helper+3] = c[3]
 
 
-computeSF(std::vector<double> &af, std::vector<double> &sf, problem_space &ps){
+def computeSF(af, sf, ps):
     # a reduction over angle
 
     #zeroing out the SF which will be accumulated
-    std::fill(sf.begin(), sf.end(), 0.0)
+    sf *= 0
 
-    for (int i=0 i<ps.N_cells ++i){
-        for ( int g=0 g<ps.N_groups ++g){
-            for ( int j=0 j<ps.N_angles ++j){
-                int sf_index = (i*4) + (g*4*ps.N_cells)
-                int af_index = (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j)
-
-                outofbounds_check(af_index, af)
-                outofbounds_check(sf_index, sf)
+    for i in range(ps.N_cells): #(int i=0 i<ps.N_cells ++i)
+        for g in range(ps.N_groups):#( int g=0 g<ps.N_groups ++g)
+            for j in range(ps.N_angles): #( int j=0 j<ps.N_angles ++j)
+                sf_index = (i*4) + (g*4*ps.N_cells)
+                af_index = (i*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j)
 
                 sf[sf_index+0] += ps.weights[j] * af[af_index+0]
                 sf[sf_index+1] += ps.weights[j] * af[af_index+1]
                 sf[sf_index+2] += ps.weights[j] * af[af_index+2]
                 sf[sf_index+3] += ps.weights[j] * af[af_index+3]
-            }
-        }
-    }
-}
 
-def compute_g2g( cells, sf, ps ):
+def compute_g2g( cells, sf, ps, material_source, Q ):
     # Energy is communicated by fuddleing around with the source term in the cell component
     # NOTE: Source is a scalar flux in transport sweeps and is angular flux in OCI! (I don't think this is right)
     
@@ -228,10 +252,11 @@ def compute_g2g( cells, sf, ps ):
     # material_source does not have L R average components so its 2*N_groups
     for c in range(ps.N_cells): #c=0 c<ps.N_cells ++c)
         for g in range (ps.N_groups): #(int g=0 g<ps.N_groups ++g)
-            cells[c].Q[4*g+0] = cells[c].material_source[2*g+0]
-            cells[c].Q[4*g+1] = cells[c].material_source[2*g+0]
-            cells[c].Q[4*g+2] = cells[c].material_source[2*g+1]
-            cells[c].Q[4*g+3] = cells[c].material_source[2*g+1]
+            index_sf = (c*4) + (g*4*ps.N_cells)
+            Q[index_sf+0] = material_source[index_sf+0]
+            Q[index_sf+1] = material_source[index_sf+0]
+            Q[index_sf+2] = material_source[index_sf+1]
+            Q[index_sf+3] = material_source[index_sf+1]
 
     # First two for loops are over all group to group scattering matrix
     # these are mostly reduction commands, should use that when heading to GPU if needing to offload
@@ -253,17 +278,21 @@ def compute_g2g( cells, sf, ps ):
 
                     index_sf = (c*4) + (j*4*ps.N_cells)
 
-                    cells[c].Q[4*i+0] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+0]
-                    cells[c].Q[4*i+1] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+1]
-                    cells[c].Q[4*i+2] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+2]
-                    cells[c].Q[4*i+3] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+3]
+                    Q[index_sf+0] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+0]
+                    Q[index_sf+1] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+1]
+                    Q[index_sf+2] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+2]
+                    Q[index_sf+3] += cells[c].xsec_g2g_scatter[j+i*ps.N_groups] * sf[index_sf+3]
             else:
                 for c in range(ps.N_cells): #(int c=0 c<ps.N_cells ++c)
                     if (cells[c].xsec_g2g_scatter[j+i*ps.N_groups] != 0):
                         print(">>>> warning a g2g scatter xsec is non-zero for a group to group")
 
 
-def convergenceLoop(af_new, af_previous, cells, ps):
+
+def convergenceLoop(af_new, af_previous, cells, ps, material_source):
+
+    #print(af_new)
+    #print(af_previous)
 
     converged = False
     itter = 0
@@ -277,19 +306,26 @@ def convergenceLoop(af_new, af_previous, cells, ps):
 
     computeSF( af_previous, sf_new, ps )
 
+    Q = np.zeros(ps.N_mat)
+
     while not converged:
 
         # communicate energy!
-        compute_g2g( cells, sf_new, ps )
+        compute_g2g( cells, sf_new, ps, material_source, Q )
         
+        #print(af_new)
+
         # sweep
-        sweep( af_new, af_previous, sf_new, cells, ps )
+        sweep( af_new, af_previous, sf_new, Q, cells, ps )
+
+        #print(af_new)
 
         # compute scalar fluxes
         computeSF( af_new, sf_new, ps )
 
         # compute the L2 norm between the last and current iteration
-        error = infNorm_error( sf_last, sf_new )
+        max = np.max(np.abs((sf_new, sf_last)))
+        error = np.max(np.abs(sf_new-sf_last)/max)
 
         # compute spectral radius
         spec_rad = pow( pow(error+error_n1,2), .5) / pow(pow(error_n1+error_n2, 2), 0.5 )
@@ -300,17 +336,16 @@ def convergenceLoop(af_new, af_previous, cells, ps):
             # including false solution protection!!!!
             if ( error < ps.convergence_tolerance *(1-spec_rad)):
                 converged = True
-            if ( sf_last == sf_new ) { 
+            if ( (sf_last == sf_new).all ):
                 print( ">>> Sweep solutions where exactly the same within double precision" )
                 converged = True 
 
-        if (itter >= ps.max_iteration)
+        if (itter >= ps.max_iteration):
             print( ">>>WARNING: Computation did not converge after ", ps.max_iteration, " iterations <<<" )
             print( "       itter: " )
             print( "       error: ")
             print( "")
             converged = True
-        }
         
 
         #std::cout << "af_new" << std::endl
@@ -326,21 +361,19 @@ def convergenceLoop(af_new, af_previous, cells, ps):
 
 
         # CYCLE PRINTING
-        int cycle_print_flag = 0 # for printing headers
+        cycle_print_flag = 0 # for printing headers
 
-        if (itter != 0) 
+        if (itter != 0):
             cycle_print_flag = 1
         
-        int t = 0
+        t = 0
 
         if (cycle_print_flag == 0):
             print( ">>>CYCLE INFO FOR TIME STEP: ", t,"<<<" )
             print("cycle   error         error_n1      error_n2     spec_rad   cycle_time\n")
             print("===================================================================================\n")
             cycle_print_flag = 1
-        }
-        print("%3d      %1.4e    %1.4e    %1.4e   %1.4e \n", itter, error, error_n1, error_n2, spec_rad )
-
+        print("%3d      %1.4e    %1.4e    %1.4e   %1.4e \n" % (itter, error, error_n1, error_n2, spec_rad, ) )
 
         itter +=1
         
@@ -350,6 +383,27 @@ def convergenceLoop(af_new, af_previous, cells, ps):
         #std::cout << "" <<std::endl
         #std::cout << "af new" <<std::endl
         #print_vec_sd(af_new)
+    # 2, ps.N_groups, ps.N_angles, 2*ps.N_cells
+
+    x = np.zeros(ps.N_cells*2)
+    for i in range(ps.N_cells): #(int i=0 i<cells.size() i++){
+        x[i*2] =  cells[i].x_left
+        x[i*2+1] = cells[i].x_left + cells[i].dx/2
+    
+    temp2 = evaluateMMSaf(cells, ps, ps.time_val)
+    
+    temp2, temp_2_sf = sort(temp2, ps)
+    temp, temp_sf = sort(af_new, ps)
+
+    plt.plot(x, temp_2_sf[0,0,:])
+    plt.plot(x, temp_sf[0,0,:])
+    #plt.plot(x, temp[0, 0, 0, :], label="sweep 0")
+    #plt.plot(x, temp[0, 0, 1, :], label="sweep 1")
+    #plt.plot(x, temp2[0, 0, 0, :], label="mms 0")
+    #plt.plot(x, temp2[0, 0, 1, :], label="mms 1")
+    #plt.legend()
+    plt.show()
+    #}
 
 
 # void check_g2g(std::vector<cell> &cells, problem_space &ps){
@@ -378,243 +432,178 @@ def convergenceLoop(af_new, af_previous, cells, ps):
 # 
 # }
 
-# void init_Q(std::vector<cell> &cells, problem_space &ps){
-# 
-#     int Nq_exp = 4*ps.N_groups
-# 
-#     for (int i=0 i<ps.N_cells ++i){
-#         cells[i].Q = std::vector<double> (Nq_exp, 0.0)
-#     }
-# }
+def init_Q(cells, ps):
+     Nq_exp = 4*ps.N_groups
+ 
+     for i in range(ps.N_cells): #(int i=0 i<ps.N_cells ++i){
+         cells[i].Q = np.zeros(Nq_exp, dtype=np.double)
 
-# void setMMSsourece(std::vector<cell> &cells, problem_space &ps, double t){
-# 
-#     for (int j=0 j<ps.N_cells ++j){
-#         for (int g=0 g<ps.N_groups ++g){
-#         for (int m=0 m<ps.N_angles ++m){
-# 
-#             double Sigma_S1  = cells[j].xsec_g2g_scatter[0]
-#             double Sigma_S2  = cells[j].xsec_g2g_scatter[3]
-#             double Sigma_S12 = cells[j].xsec_g2g_scatter[2]
-#             double Sigma_S21 = cells[j].xsec_g2g_scatter[1]
-#             
-#             std::vector<double> temp
-# 
-#             if ( g == 0 ){
-#                 temp = Q1(cells[j].v[0], cells[j].v[1], cells[j].xsec_total[0], cells[j].xsec_total[1], ps.angles[m], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[j].x, cells[j].dx, t, ps.dt )
-#             } else if ( g == 1) {
-#                 temp = Q2(cells[j].v[0], cells[j].v[1], cells[j].xsec_total[0], cells[j].xsec_total[0], ps.angles[m], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[j].x, cells[j].dx, t, ps.dt)
-#             } else {
-#                 std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl
-#             }
-# 
-#             #group 1
-#             cells[j].material_source[0] += temp[0] * ps.weights[m]
-#             cells[j].material_source[1] += temp[1] * ps.weights[m]
-#             cells[j].material_source[2] += temp[2] * ps.weights[m]
-#             cells[j].material_source[3] += temp[3] * ps.weights[m]
-#         }
-#         }
-#     }
-# }
+def setMMSource(cells, ps, t):
 
-# void MMSInitialCond(std::vector<double> &af, std::vector<cell> &cells, problem_space &ps){
-# 
-#     for (int j=0 j<ps.N_cells ++j){
-#         for (int g=0 g<2 ++g){
-#         for (int m=0 m<ps.N_angles ++m){
-# 
-#             int helper = (j*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m)
-#             #group 1
-# 
-#             std::vector<double> temp
-# 
-#             if ( g == 0 ){
-#                 temp = AF_g1( ps.angles[j], 0, ps.dt, cells[j].x, cells[j].dx )
-#             } else if ( g == 1) {
-#                 temp = AF_g2( ps.angles[j], 0, ps.dt, cells[j].x, cells[j].dx )
-#             } else{
-#                 std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl
-#             }
-# 
-#             af[helper+0] = temp[0]
-#             af[helper+1] = temp[1]
-#             af[helper+2] = temp[2]
-#             af[helper+3] = temp[3]
-# 
-#         }
-#         }
-#     }
-# }
+    material_source = np.zeros(4*ps.N_cells*ps.N_groups)
 
-# void MMSFullSol ( std::vector<cell> &cells, problem_space &ps ){
-# 
-#     std::vector<double> mms_temp(ps.N_mat)
-#     std::vector<double> temp(4)
-#     int index_start
-# 
-#     double time_val = ps.t_init
-# 
-#     #double mu, double t_k, double Deltat, double x_j, double Deltax
-# 
-#     for (int tp=0 tp<ps.N_time tp++){
-#         for (int ip=0 ip<ps.N_cells ip++){
-#             for (int gp=0 gp<2 gp++){
-#             #for (int gp=0 gp<ps.N_groups gp++){ #manual override for mms 
-#                 for (int jp=0 jp<ps.N_angles jp++){
-#                     
-# 
-#                     if ( gp == 0 ){
-#                         temp = AF_g1( ps.angles[jp], time_val, ps.dt, cells[ip].x, cells[ip].dx )
-#                     } else if ( gp == 1) {
-#                         temp = AF_g2( ps.angles[jp], time_val, ps.dt, cells[ip].x, cells[ip].dx )
-#                     } else{
-#                         std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl
-#                     }
-#                     index_start = (ip*(ps.SIZE_cellBlocks) + gp*(ps.SIZE_groupBlocks) + 4*jp)
-#                     mms_temp[index_start] = temp[0]
-#                     mms_temp[index_start+1] = temp[1]
-#                     mms_temp[index_start+2] = temp[2]
-#                     mms_temp[index_start+3] = temp[3]
-#                 }
-#             }
-#         }
-# 
-# 
-#         
-#         string ext = ".csv"
-#         string file_name = "mms_sol"
-#         string dt = to_string(tp)
-# 
-#         file_name = file_name + dt + ext
-# 
-#         std::ofstream output(file_name)
-#         output << "TIME STEP: " << tp << "Unsorted solution vector for mms" << endl
-#         output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl
-#         for (int i=0 i<mms_temp.size() i++){
-#             output << mms_temp[i] << "," << endl
-#         }
-# 
-#         time_val += ps.dt
-# 
-#     
-#     }
-# 
-#     cout << "time integrated mms solutions published " << endl
-# }
+    for j in range(ps.N_cells): #(int j=0 j<ps.N_cells ++j)
+        for g in range(ps.N_groups): #(int g=0 g<ps.N_groups ++g)
+            for m in range(ps.N_angles): #(int m=0 m<ps.N_angles ++m)
 
+                helper = (j*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m)
+                sf_helper = (j*4) + (g*4*ps.N_cells)
 
-#void MMSFullSource ( std::vector<cell> &cells, problem_space &ps ){
-#
-#    std::vector<double> mms_temp(ps.N_mat)
-#    std::vector<double> temp(4)
-#    int index_start
-#
-#    double time_val = ps.t_init
-#
-#    #double mu, double t_k, double Deltat, double x_j, double Deltax
-#
-#    for (int tp=0 tp<ps.N_time tp++){
-#        for (int ip=0 ip<ps.N_cells ip++){
-#            for (int gp=0 gp<2 gp++){
-#            #for (int gp=0 gp<ps.N_groups gp++){ #manual override for mms 
-#                for (int jp=0 jp<ps.N_angles jp++){
-#                    double Sigma_S1  = cells[ip].xsec_g2g_scatter[0]
-#                    double Sigma_S2  = cells[ip].xsec_g2g_scatter[3]
-#                    double Sigma_S12 = cells[ip].xsec_g2g_scatter[2]
-#                    double Sigma_S21 = cells[ip].xsec_g2g_scatter[1]
-#
-#                    if ( gp == 0 ){
-#                        temp =  Q1(cells[ip].v[0], cells[ip].v[1], cells[ip].xsec_total[0], cells[ip].xsec_total[1], ps.angles[jp], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[ip].x, cells[ip].dx, tp, ps.dt )
-#                    } else if ( gp == 1) {
-#                        temp =  Q2(cells[ip].v[0], cells[ip].v[1], cells[ip].xsec_total[0], cells[ip].xsec_total[1], ps.angles[jp], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[ip].x, cells[ip].dx, tp, ps.dt )
-#                    } else{
-#                        std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl
-#                    }
-#                    index_start = (ip*(ps.SIZE_cellBlocks) + gp*(ps.SIZE_groupBlocks) + 4*jp)
-#                    mms_temp[index_start] = temp[0]
-#                    mms_temp[index_start+1] = temp[1]
-#                    mms_temp[index_start+2] = temp[2]
-#                    mms_temp[index_start+3] = temp[3]
-#                }
-#            }
-#        }
-#
-#
-#        
-#        string ext = ".csv"
-#        string file_name = "mms_source"
-#        string dt = to_string(tp)
-#
-#        file_name = file_name + dt + ext
-#
-#        std::ofstream output(file_name)
-#        output << "TIME STEP: " << tp << "Unsorted solution vector for mms" << endl
-#        output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl
-#        for (int i=0 i<mms_temp.size() i++){
-#            output << mms_temp[i] << "," << endl
-#        }
-#
-#        time_val += ps.dt
-#
-#    
-#    }
-#
-#    cout << "time integrated mms solutions published " << endl
-#}
+                Sigma_S1  = cells[j].xsec_scatter[0]
+                Sigma_S2  = cells[j].xsec_scatter[1]
+                Sigma_S12 = cells[j].xsec_g2g_scatter[2]
+                Sigma_S21 = cells[j].xsec_g2g_scatter[1]
+
+                if ( g == 0 ):
+                    temp = Q1(cells[j].v[0], cells[j].v[1], cells[j].xsec_total[0], cells[j].xsec_total[1], ps.angles[m], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[j].x, cells[j].dx, t, ps.dt )
+                elif ( g == 1):
+                    temp = Q2(cells[j].v[0], cells[j].v[1], cells[j].xsec_total[0], cells[j].xsec_total[1], ps.angles[m], Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, cells[j].x, cells[j].dx, t, ps.dt)
+                else:
+                    print("This MMS Verification is a 2 group problem only")
+                
+                temp *=ps.weights[m]
+
+                cells[j].material_source[0] += temp[0] * ps.weights[m]
+                cells[j].material_source[1] += temp[1] * ps.weights[m]
+                cells[j].material_source[2] += temp[2] * ps.weights[m]
+                cells[j].material_source[3] += temp[3] * ps.weights[m]
+                #print(temp[0] * ps.weights[m])
+                material_source[sf_helper + 0] += temp[0]
+                material_source[sf_helper + 1] += temp[1]
+                material_source[sf_helper + 2] += temp[2]
+                material_source[sf_helper + 3] += temp[3]
+    
+    return(material_source)
 
 
 
-def timeLoop(af_previous, cells, ps){
+def MMSInitialCond(af, cells, ps):
+    for j in range(ps.N_cells): # (int j=0 j<ps.N_cells ++j){
+        for g in range(2):
+            for m in range(ps.N_angles): # (int m=0 m<ps.N_angles ++m){
+
+                helper = (j*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m)
+                #group 1
+
+                if ( g == 0 ):
+                    temp = af1( ps.angles[m], 0, ps.dt, cells[j].x, cells[j].dx )
+                elif ( g == 1 ):
+                    temp = af2( ps.angles[m], 0, ps.dt, cells[j].x, cells[j].dx )
+                else:
+                    print("This MMS Verification is a 2 group problem only")
+                
+
+                af[helper+0] = temp[0]
+                af[helper+1] = temp[1]
+                af[helper+2] = temp[2]
+                af[helper+3] = temp[3]
+
+
+def evaluateMMSaf(cells, ps, time):
+    af = np.zeros((ps.N_mat))
+    for j in range(ps.N_cells): # (int j=0 j<ps.N_cells ++j){
+        for g in range(2):
+            for m in range(ps.N_angles): # (int m=0 m<ps.N_angles ++m){
+
+                helper = (j*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*m)
+                #group 1
+
+                if ( g == 0 ):
+                    temp = af1( ps.angles[m], time, ps.dt, cells[j].x, cells[j].dx )
+                elif ( g == 1 ):
+                    temp = af2( ps.angles[m], time, ps.dt, cells[j].x, cells[j].dx )
+                else:
+                    print("This MMS Verification is a 2 group problem only")
+                
+                af[helper+0] = temp[0]
+                af[helper+1] = temp[1]
+                af[helper+2] = temp[2]
+                af[helper+3] = temp[3]
+
+    return(af)
+
+
+def timeLoop(af_previous, cells, ps):
 
     af_solution = np.zeros( ps.N_mat )
 
-    MMSInitialCond(af_solution, cells, ps)
+    MMSInitialCond(af_previous, cells, ps)
 
-    MMSFullSol( cells, ps )
-    MMSFullSource( cells, ps )
+    #x = np.zeros(ps.N_cells*2)
+    #for i in range(ps.N_cells): #(int i=0 i<cells.size() i++){
+    #    x[i*2] =  cells[i].x_left
+    #    x[i*2+1] = cells[i].x_left + cells[i].dx/2
+
+    #temp = sort(af_previous, ps)
+    #print(temp)
+    #print(af_previous)
+    #plt.plot(x, temp[0, 0, 0, :])
+    #plt.plot(x, temp[0, 0, 0, :])
+    #plt.show()
+
+    #exit()
+
+    #MMSFullSol( cells, ps )
+    #MMSFullSource( cells, ps )
 
     #check_g2g(cells, ps)
 
     #ps.time_val = 0
 
-    for (int t=0 t<ps.N_time ++t){
+    for t in range(ps.N_time): # (int t=0 t<ps.N_time ++t){
+
+        ps.time_val += ps.dt
 
         # set mms if needed
-        setMMSsourece(cells, ps, t)
+        material_source = setMMSource(cells, ps, t)
+
+        #print(material_source)
+
+        #print(cells[0].Q)
+        #print(cells[2].material_source)
+        #cells[2].material_source[0] = 45.25
+        #print(cells[2].material_source)
+
+        #x = np.zeros(ps.N_cells*2)
+        #for i in range(ps.N_cells): #(int i=0 i<cells.size() i++){
+        #    x[i*2] =  cells[i].x_left
+        #    x[i*2+1] = cells[i].x_left + cells[i].dx/2
+
+        #temp = sort(Q, ps)
+        #print(temp.shape)
+        #plt.plot(x, temp[0, 0, 0, :])
+        #plt.plot(x, temp[0, 0, 1, :])
+        #plt.show()
+
+        #print(Q)
 
         # run convergence loop
-        convergenceLoop(af_solution,  af_previous, cells, ps)
+        convergenceLoop(af_solution,  af_previous, cells, ps, material_source)
 
-        # save data
-        string ext = ".csv"
-        string file_name = "Sweep_afluxUnsorted"
-        string dt = to_string(t)
+        ## save data
+        #string ext = ".csv"
+        #string file_name = "Sweep_afluxUnsorted"
+        #string dt = to_string(t)
 
-        file_name = file_name + dt + ext
+        #file_name = file_name + dt + ext
 
-        std::ofstream output(file_name)
-        output << "TIME STEP: " << t << "Unsorted solution vector" << endl
-        output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl
-        for (int i=0 i<af_solution.size() i++){
-            output << af_solution[i] << "," << endl
-        }
+        #std::ofstream output(file_name)
+        #output << "TIME STEP: " << t << "Unsorted solution vector" << endl
+        #output << "N_space: " << ps.N_cells << " N_groups: " << ps.N_groups << " N_angles: " << ps.N_angles << endl
+        #for (int i=0 i<af_solution.size() i++){
+        #    output << af_solution[i] << "," << endl
+        #}
+        #std::ofstream dist("x.csv")
+        #dist << "x: " << endl
+        #for (int i=0 i<cells.size() i++){
+        #    dist << cells[i].x_left << "," << endl
+        #    dist << cells[i].x_left + cells[i].dx/2 << "," <<endl
+        #}
 
-        std::ofstream dist("x.csv")
-        dist << "x: " << endl
-        for (int i=0 i<cells.size() i++){
-            dist << cells[i].x_left << "," << endl
-            dist << cells[i].x_left + cells[i].dx/2 << "," <<endl
-        }
-
-        cout << "file saved under: " << file_name << endl
+        #cout << "file saved under: " << file_name << endl
 
         # new previous info
         af_previous = af_solution
-
-        ps.time_val += ps.dt
-    }
-}
 
 
 
@@ -629,8 +618,10 @@ if __name__ == '__main__':
     dt = 0.1
     t_init = 0.25
     v = np.array( (1, 1) )
-    xsec_total = np.array ((1.5454, 0.04568))
-    #vector<double> xsec_scatter = {0.61789, 0.072534}
+    #xsec_total = np.array ((1.5454, 0.04568))
+    xsec_total = np.array((0,0))
+    #xsec_scatter = np.array((0.61789, 0.072534))
+    xsec_scatter = np.array((0, 0))
     #vector<double> xsec_scatter = {0,0}
     #double ds = 0.0
     material_source = np.array((0,0,0,0,0,0,0,0)) # isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
@@ -638,8 +629,8 @@ if __name__ == '__main__':
     Length = .4
     IC_homo = 0
     
-    N_cells = 4 #10
-    N_angles = 2
+    N_cells = 10 #10
+    N_angles = 64
     N_time = 1
     N_groups = 2
 
@@ -660,7 +651,7 @@ if __name__ == '__main__':
     #vector<double> weights(N_angles, 0.0)
     #vector<double> angles(N_angles, 0.0)
 
-    [weights, angles] = np.polynomial.legendre.leggauss(N_angles)
+    [angles, weights] = np.polynomial.legendre.leggauss(N_angles)
 
     ps = problem_space
     ps.L = Length
@@ -678,7 +669,7 @@ if __name__ == '__main__':
     ps.angles = angles
     ps.weights = weights
     ps.initialize_from_previous = False
-    ps.max_iteration = int(4)
+    ps.max_iteration = int(1e4)
     # 0 for vac 1 for reflecting 3 for mms
     # size of the cell blocks in all groups and angle
     ps.SIZE_cellBlocks = ps.N_angles*ps.N_groups*4
@@ -700,27 +691,32 @@ if __name__ == '__main__':
         if (i == 0 ):
             cellCon.x_left = 0
         else:
-            cellCon.x_left = cells[cells.size()-1].x_left+cells[cells.size()-1].dx
+            cellCon.x_left = cells[len(cells)-1].x_left+cells[len(cells)-1].dx
         
-        #cellCon.xsec_scatter = vector<double> {xsec_scatter[0], xsec_scatter[1]}
+        cellCon.xsec_scatter = np.array((xsec_scatter[0], xsec_scatter[1]))
+        cellCon.x = dx/2 + dx*i
+        print(cellCon.x)
         cellCon.xsec_total = np.array((xsec_total[0], xsec_total[1]))
+        print(cellCon.xsec_total)
         cellCon.dx = dx
         cellCon.v = v
         cellCon.dt = dt
         cellCon.material_source = material_source
-        cellCon.xsec_g2g_scatter = np.array( (0, 0, 0, 0))
+        cellCon.xsec_g2g_scatter = np.array( (0, 0, 0, 0) )
         #cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 0}
 
         #vector<double> temp (N_angles*N_groups*4, 1.0)
-        #for (int p=0 p<temp.size() ++p){temp[p] = Q[0]}
-        #cellCon.Q = temp
+        #for (int p=0 p<temp.size() ++p){temp[p] = Q[0]
+        #cellCon.Q = np.ones(4*ps.N_groups)
         #cellCon.N_angle = N_angles
 
         cells.append(cellCon)
 
+    #print(np.arange(dx/2,(N_cells)*dx, dx))
+
     init_Q(cells, ps)
 
-    af_previous = np.zeros(N_mat, 0)
+    af_previous = np.zeros(N_mat)
 
     timeLoop(af_previous, cells, ps)
 

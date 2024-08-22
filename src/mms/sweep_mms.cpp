@@ -431,9 +431,9 @@ void MMSInitialCond(std::vector<double> &af, std::vector<cell> &cells, problem_s
             std::vector<double> temp;
 
             if ( g == 0 ){
-                temp = AF_g1( ps.angles[j], 0, ps.dt, cells[j].x, cells[j].dx );
+                temp = AF_g1( ps.angles[m], 0, ps.dt, cells[j].x, cells[j].dx );
             } else if ( g == 1) {
-                temp = AF_g2( ps.angles[j], 0, ps.dt, cells[j].x, cells[j].dx );
+                temp = AF_g2( ps.angles[m], 0, ps.dt, cells[j].x, cells[j].dx );
             } else{
                 std::cout<<"This MMS Verification is a 2 group problem only" <<std::endl;
             }
