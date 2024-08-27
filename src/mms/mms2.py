@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 sym.init_printing(use_unicode=True)
 import math
 
+PRINT_TO_TERMINAL = False
+PRINT_PYTHON = True
+
 # note: all cross sections (sigma) are understood to be macroscopic
 # group 1 is the fast group 2 is the slow
 # to evaluate intergrals go to https://www.integral-calculator.com/
@@ -57,23 +60,21 @@ if __name__ == '__main__':
     # arbitrary manufactured solution
     # note: technically psi1 = Ax + Bt + Cmu but they are all chosen to be 1
 
-    psi1 = x + t + (mu +1)
+    psi1 = x + t + (mu +1) # group 1
+    psi2 = x**2*t + (mu+1) # group 2
 
-    # doing some calc 
+    # doing some calc g1
     dpsi1_dx = sym.diff(psi1, x)
     dpsi1_dt = sym.diff(psi1, t)
     
     # evaluated manually wrt mu, bounds -1 to 1
     eval_intpsi1 = -2*(x+t+1)
 
-    # group 2
-    psi2 = x**2*t + (mu+1)
-
-    # doing some calc 
+    # doing some calc g2
     dpsi2_dx = sym.diff(psi2, x)
     dpsi2_dt = sym.diff(psi2, t)
 
-    # evaluated manually wrt mu, bounds -1 to 1
+    # evaluated manually wrt mu, bounds -1 to 1 g2
     eval_intpsi2 = -2*t*x**2-2
 
     # NTE for group 1
@@ -97,65 +98,19 @@ if __name__ == '__main__':
     Deltat = sym.Symbol('Deltat')
 
     # cell integrated time edge
-
     Q1_Lint = sym.integrate(Q1, (x, x_j-Deltax/2, x_j))
     Q1_Rint = sym.integrate(Q1, (x, x_j, x_j+Deltax/2))
-    Q2_Lint = sym.integrate(Q2, (x, x_j-Deltax/2, x_j))
-    Q2_Rint = sym.integrate(Q2, (x, x_j, x_j+Deltax/2))
-
     #cell integrated time averaged sym.simplify
-
     Q1_Lint_timeav = Q1_Lint.subs(t, t_k+Deltat/2) + Q1_Lint.subs(t, t_k-Deltat/2) / 2
     Q1_Rint_timeav = Q1_Rint.subs(t, t_k+Deltat/2) + Q1_Rint.subs(t, t_k-Deltat/2) / 2
+    
+
+    # cell integrated time edge
+    Q2_Lint = sym.integrate(Q2, (x, x_j-Deltax/2, x_j))
+    Q2_Rint = sym.integrate(Q2, (x, x_j, x_j+Deltax/2))
+    #cell integrated time averaged sym.simplify
     Q2_Lint_timeav = Q2_Lint.subs(t, t_k+Deltat/2) + Q2_Lint.subs(t, t_k-Deltat/2) / 2
     Q2_Rint_timeav = Q2_Rint.subs(t, t_k+Deltat/2) + Q2_Rint.subs(t, t_k-Deltat/2) / 2
-
-    print("=========SOURCES=========")
-    print()
-    print('Continuous function describing group 1 source')
-    print(Q1)
-    print()
-    print(sym.latex(Q1))
-    print()
-    print('Continuous function describing group 2 source')
-    print(Q2)
-    print()
-    print(sym.latex(Q2))
-    print()
-    print()
-    print("Cell integrated time edge values for export to a function")
-    print()
-    print(Q1_Lint.subs(t, t_k+Deltat/2))
-    print(Q1_Rint.subs(t, t_k+Deltat/2))
-    print(Q2_Lint.subs(t, t_k+Deltat/2))
-    print(Q2_Rint.subs(t, t_k+Deltat/2))
-    print()
-    print()
-    print("Cell integrated time edge values for Latex")
-    print()
-    print(sym.latex(Q1_Lint.subs(t, t_k+Deltat/2)))
-    print(sym.latex(Q1_Rint.subs(t, t_k+Deltat/2)))
-    print(sym.latex(Q2_Lint.subs(t, t_k+Deltat/2)))
-    print(sym.latex(Q2_Rint.subs(t, t_k+Deltat/2)))
-    print()
-    print()
-    print("Cell integrated time average values for export to a function")
-    print()
-    print(Q1_Lint_timeav)
-    print(Q1_Rint_timeav)
-    print(Q2_Lint_timeav)
-    print(Q2_Rint_timeav)
-    print()
-    print()
-    print("Cell integrated time average values for Latex")
-    print()
-    print(sym.latex(Q1_Lint_timeav))
-    print(sym.latex(Q1_Rint_timeav))
-    print(sym.latex(Q2_Lint_timeav))
-    print(sym.latex(Q2_Rint_timeav))
-    print()
-    print()
-
 
     # Same crap but for Angular flux terms
 
@@ -170,103 +125,150 @@ if __name__ == '__main__':
     AF1_Rint_timeav = AF1_Rint.subs(t, t_k+Deltat/2) + AF1_Rint.subs(t, t_k-Deltat/2) / 2
     AF2_Lint_timeav = AF2_Lint.subs(t, t_k+Deltat/2) + AF2_Lint.subs(t, t_k-Deltat/2) / 2
     AF2_Rint_timeav = AF2_Rint.subs(t, t_k+Deltat/2) + AF2_Rint.subs(t, t_k-Deltat/2) / 2
+    
+    if (PRINT_TO_TERMINAL):
+        print("=========SOURCES=========")
+        print()
+        print('Continuous function describing group 1 source')
+        print(Q1)
+        print()
+        print(sym.latex(Q1))
+        print()
+        print('Continuous function describing group 2 source')
+        print(Q2)
+        print()
+        print(sym.latex(Q2))
+        print()
+        print()
+        print("Cell integrated time edge values for export to a function")
+        print()
+        print(Q1_Lint.subs(t, t_k+Deltat/2))
+        print(Q1_Rint.subs(t, t_k+Deltat/2))
+        print(Q2_Lint.subs(t, t_k+Deltat/2))
+        print(Q2_Rint.subs(t, t_k+Deltat/2))
+        print()
+        print()
+        print("Cell integrated time edge values for Latex")
+        print()
+        print(sym.latex(Q1_Lint.subs(t, t_k+Deltat/2)))
+        print(sym.latex(Q1_Rint.subs(t, t_k+Deltat/2)))
+        print(sym.latex(Q2_Lint.subs(t, t_k+Deltat/2)))
+        print(sym.latex(Q2_Rint.subs(t, t_k+Deltat/2)))
+        print()
+        print()
+        print("Cell integrated time average values for export to a function")
+        print()
+        print(Q1_Lint_timeav)
+        print(Q1_Rint_timeav)
+        print(Q2_Lint_timeav)
+        print(Q2_Rint_timeav)
+        print()
+        print()
+        print("Cell integrated time average values for Latex")
+        print()
+        print(sym.latex(Q1_Lint_timeav))
+        print(sym.latex(Q1_Rint_timeav))
+        print(sym.latex(Q2_Lint_timeav))
+        print(sym.latex(Q2_Rint_timeav))
+        print()
+        print()
 
-    print("=========ANGULAR FLUXES=========")
-    print()
-    print()
-    print("Cell integrated time edge values for export to a function")
-    print()
-    print(AF1_Lint.subs(t, t_k+Deltat/2))
-    print(AF1_Rint.subs(t, t_k+Deltat/2))
-    print(AF2_Lint.subs(t, t_k+Deltat/2))
-    print(AF2_Rint.subs(t, t_k+Deltat/2))
-    print()
-    print()
-    print("Cell integrated time edge values for Latex")
-    print()
-    print(sym.latex(AF1_Lint.subs(t, t_k+Deltat/2)))
-    print(sym.latex(AF1_Rint.subs(t, t_k+Deltat/2)))
-    print(sym.latex(AF2_Lint.subs(t, t_k+Deltat/2)))
-    print(sym.latex(AF2_Rint.subs(t, t_k+Deltat/2)))
-    print()
-    print()
+        print("=========ANGULAR FLUXES=========")
+        print()
+        print()
+        print("Cell integrated time edge values for export to a function")
+        print()
+        print(AF1_Lint.subs(t, t_k+Deltat/2))
+        print(AF1_Rint.subs(t, t_k+Deltat/2))
+        print(AF2_Lint.subs(t, t_k+Deltat/2))
+        print(AF2_Rint.subs(t, t_k+Deltat/2))
+        print()
+        print()
+        print("Cell integrated time edge values for Latex")
+        print()
+        print(sym.latex(AF1_Lint.subs(t, t_k+Deltat/2)))
+        print(sym.latex(AF1_Rint.subs(t, t_k+Deltat/2)))
+        print(sym.latex(AF2_Lint.subs(t, t_k+Deltat/2)))
+        print(sym.latex(AF2_Rint.subs(t, t_k+Deltat/2)))
+        print()
+        print()
 
-    print("Cell integrated time average values for export to a function")
-    print()
-    print(AF1_Lint_timeav)
-    print(AF1_Rint_timeav)
-    print(AF2_Lint_timeav)
-    print(AF2_Rint_timeav)
-    print()
-    print()
-    print("Cell integrated time average values for Latex")
-    print()
-    print(sym.latex(AF1_Lint_timeav))
-    print(sym.latex(AF1_Rint_timeav))
-    print(sym.latex(AF2_Lint_timeav))
-    print(sym.latex(AF2_Rint_timeav))
-    print()
-    print()
+        print("Cell integrated time average values for export to a function")
+        print()
+        print(AF1_Lint_timeav)
+        print(AF1_Rint_timeav)
+        print(AF2_Lint_timeav)
+        print(AF2_Rint_timeav)
+        print()
+        print()
+        print("Cell integrated time average values for Latex")
+        print()
+        print(sym.latex(AF1_Lint_timeav))
+        print(sym.latex(AF1_Rint_timeav))
+        print(sym.latex(AF2_Lint_timeav))
+        print(sym.latex(AF2_Rint_timeav))
+        print()
+        print()
 
     #### Python function output
+    if PRINT_PYTHON:
+        mms_out =  open("mms_auto2.py", "w")
+        print("import numpy as np", file=mms_out)
+        print("", file=mms_out)
+        print("# File auto generated", file=mms_out)
+        print("", file=mms_out)
 
-    mms_out =  open("mms_auto2.py", "w")
-    print("import numpy as np", file=mms_out)
-    print("", file=mms_out)
-    print("# File auto generated", file=mms_out)
-    print("", file=mms_out)
+        print("def Q1(v1, v2, Sigma_1, Sigma_2, mu, Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, x_j, Deltax, t_k, Deltat):", file=mms_out)
+        print("", file=mms_out)
+        print("   Q1_vals = np.zeros(4)", file=mms_out)
+        print("", file=mms_out)
+        print("   Q1_vals[0] = ", Q1_Lint_timeav, "", file=mms_out)
+        print("   Q1_vals[1] = ", Q1_Rint_timeav, "", file=mms_out)
+        print("   Q1_vals[2] = ", Q1_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
+        print("   Q1_vals[3] = ", Q1_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
+        print("", file=mms_out)
+        print("   return( Q1_vals )", file=mms_out)
+        print("", file=mms_out)
+        print("", file=mms_out)
+        print("def Q2(v1, v2, Sigma_1, Sigma_2, mu, Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, x_j, Deltax, t_k, Deltat):", file=mms_out)
+        print("", file=mms_out)
+        print("   Q2_vals = np.zeros(4)", file=mms_out)
+        print("", file=mms_out)
+        print("   Q2_vals[0] = ", Q2_Lint_timeav, "", file=mms_out)
+        print("   Q2_vals[1] = ", Q2_Rint_timeav, "", file=mms_out)
+        print("   Q2_vals[2] = ", Q2_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
+        print("   Q2_vals[3] = ", Q2_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
+        print("", file=mms_out)
+        print("   return( Q2_vals )", file=mms_out)
+        print("", file=mms_out)
+        print("", file=mms_out)
+        print("", file=mms_out)
 
-    print("def Q1(v1, v2, Sigma_1, Sigma_2, mu, Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, x_j, Deltax, t_k, Deltat):", file=mms_out)
-    print("", file=mms_out)
-    print("   Q1_vals = np.zeros(4)", file=mms_out)
-    print("", file=mms_out)
-    print("   Q1_vals[0] = ", Q1_Lint_timeav, "", file=mms_out)
-    print("   Q1_vals[1] = ", Q1_Rint_timeav, "", file=mms_out)
-    print("   Q1_vals[2] = ", Q1_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
-    print("   Q1_vals[3] = ", Q1_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
-    print("", file=mms_out)
-    print("   return( Q1_vals )", file=mms_out)
-    print("", file=mms_out)
-    print("", file=mms_out)
-    print("def Q2(v1, v2, Sigma_1, Sigma_2, mu, Sigma_S1, Sigma_S2, Sigma_S12, Sigma_S21, x_j, Deltax, t_k, Deltat):", file=mms_out)
-    print("", file=mms_out)
-    print("   Q2_vals = np.zeros(4)", file=mms_out)
-    print("", file=mms_out)
-    print("   Q2_vals[0] = ", Q2_Lint_timeav, "", file=mms_out)
-    print("   Q2_vals[1] = ", Q2_Rint_timeav, "", file=mms_out)
-    print("   Q2_vals[2] = ", Q2_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
-    print("   Q2_vals[3] = ", Q2_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
-    print("", file=mms_out)
-    print("   return( Q2_vals )", file=mms_out)
-    print("", file=mms_out)
-    print("", file=mms_out)
-    print("", file=mms_out)
-
-    print("def af1(mu, t_k, Deltat, x_j, Deltax):", file=mms_out)
-    print("", file=mms_out)
-    print("   af1_vals = np.zeros(4)", file=mms_out)
-    print("", file=mms_out)
-    print("   af1_vals[0] = ", AF1_Lint_timeav, "", file=mms_out)
-    print("   af1_vals[1] = ", AF1_Rint_timeav, "", file=mms_out)
-    print("   af1_vals[2] = ", AF1_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
-    print("   af1_vals[3] = ", AF1_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
-    print("", file=mms_out)
-    print("   return( af1_vals )", file=mms_out)
-    print("", file=mms_out)
-    print("", file=mms_out)
-    print("def af2(mu, t_k, Deltat, x_j, Deltax):", file=mms_out)
-    print("", file=mms_out)
-    print("   af2_vals = np.zeros(4)", file=mms_out)
-    print("", file=mms_out)
-    print("   af2_vals[0] = ", AF2_Lint_timeav, "", file=mms_out)
-    print("   af2_vals[1] = ", AF2_Rint_timeav, "", file=mms_out)
-    print("   af2_vals[2] = ", AF2_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
-    print("   af2_vals[3] = ", AF2_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
-    print("", file=mms_out)
-    print("   return( af2_vals )", file=mms_out)
-    print("", file=mms_out)
-    print("", file=mms_out)
-    mms_out.close
+        print("def af1(mu, t_k, Deltat, x_j, Deltax):", file=mms_out)
+        print("", file=mms_out)
+        print("   af1_vals = np.zeros(4)", file=mms_out)
+        print("", file=mms_out)
+        print("   af1_vals[0] = ", AF1_Lint_timeav, "", file=mms_out)
+        print("   af1_vals[1] = ", AF1_Rint_timeav, "", file=mms_out)
+        print("   af1_vals[2] = ", AF1_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
+        print("   af1_vals[3] = ", AF1_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
+        print("", file=mms_out)
+        print("   return( af1_vals )", file=mms_out)
+        print("", file=mms_out)
+        print("", file=mms_out)
+        print("def af2(mu, t_k, Deltat, x_j, Deltax):", file=mms_out)
+        print("", file=mms_out)
+        print("   af2_vals = np.zeros(4)", file=mms_out)
+        print("", file=mms_out)
+        print("   af2_vals[0] = ", AF2_Lint_timeav, "", file=mms_out)
+        print("   af2_vals[1] = ", AF2_Rint_timeav, "", file=mms_out)
+        print("   af2_vals[2] = ", AF2_Lint.subs(t, t_k+Deltat/2), "", file=mms_out)
+        print("   af2_vals[3] = ", AF2_Rint.subs(t, t_k+Deltat/2), "", file=mms_out)
+        print("", file=mms_out)
+        print("   return( af2_vals )", file=mms_out)
+        print("", file=mms_out)
+        print("", file=mms_out)
+        mms_out.close
 
 
     #### C++ function output
