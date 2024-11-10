@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 
 A = np.array([[0.91367513,   0.28867513,  12.5,          0.,           0.,           0.,           0.,           0.        ],
             [ -0.28867513,   0.91367513,   0.,          12.5,          0.,           0.,           0.,           0.        ],
@@ -11,5 +12,8 @@ A = np.array([[0.91367513,   0.28867513,  12.5,          0.,           0.,      
 
 b = np.array([[0.17320508, 0.,         0.17320508, 0.,         0.,         0.,         0.,         0.        ]])
 b = np.transpose(b)
+
+print(scipy.linalg.eigh(A))
+print(np.linalg.cholesky(A))
 
 print(np.linalg.solve(A,b))

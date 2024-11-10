@@ -3,8 +3,8 @@
 #include "util.h"
 #include "base_mats.h"
 #include "legendre.h"
-#include <hip/hip_runtime_api.h>
-#include "rocsolver.cpp"
+//#include <hip/hip_runtime_api.h>
+//#include "rocsolver.cpp"
 
 const bool OPTIMIZED = true;
 
@@ -12,7 +12,7 @@ const bool OPTIMIZED = true;
 // lockhartt cc sweep.cpp -std=c++20
 // g++ -g -L -llapack
 // compiling on ROCM device hipcc -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o xSweep.out
-
+// 
 
 // for profiling:
     // compile with hipcc -g -w -I/opt/rocm/include -L/opt/rocm/lib -L/usr/lib64 -lrocsolver -lrocblas -llapack sweep_gpu.cpp -o xSweep.out
@@ -20,7 +20,7 @@ const bool OPTIMIZED = true;
     // view on https://ui.perfetto.dev
 
 const bool cycle_print = true;
-const bool save_output = false;
+const bool save_output = true;
 
 extern "C" void dgesv_( int *n, int *nrhs, double  *a, int *lda, int *ipiv, double *b, int *lbd, int *info  );
 
@@ -74,7 +74,7 @@ void sb_Axeb(double *A_sp_cm, vector<double> &b, int N_groups, int N_angles){
     
     
 
-
+/*
 void gpu_sb_nopt_Axeb(double *A_sp_cm, vector<double> &b, int N_groups, int N_angles){
     // solves a strided batched problem but assumes that nothing is prior allocated
 
@@ -132,7 +132,7 @@ void gpu_sb_Axeb(double *dA, double *db, int itter, int *ipiv, int *dinfo, int N
     rocsolver_dgesv_strided_batched(handle, N, nrhs, dA, lda, strideA, ipiv, strideP, db, ldb, strideB, dinfo, batch_count);
 }
 
-
+*/
 void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space ps){
     for (int j=0; j<ps.N_angles; ++j){
         for (int g=0; g<ps.N_groups; ++g){
@@ -200,8 +200,8 @@ void sweep_normal(std::vector<double> &af_last, std::vector<double> &af_prev, st
                     double af_hn_LB;
 
                     if (i == 0){ //LHS boundary condition
-                        af_LB     = 0;//ps.boundary_condition[];
-                        af_hn_LB  = 0;//ps.boundary_condition[];
+                        af_LB     = 1;//ps.boundary_condition[];
+                        af_hn_LB  = 1;//ps.boundary_condition[];
                     } else {
                         outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 1, af_last );
                         outofbounds_check( ((i-1)*(ps.SIZE_cellBlocks) + g*(ps.SIZE_groupBlocks) + 4*j) + 3, af_last );
@@ -445,6 +445,7 @@ void cpu_b_var_win_sweep(int i, int i_n, std::vector<double> &b, problem_space &
     }
 }
 
+/*
 __global__ void gpu_b_var_win_sweep(int i, int i_n, double *b, double *angles, int N_cells, int N_angles, int N_groups){
     int j = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -513,6 +514,7 @@ __global__ void gpu_b_var_win_sweep(int i, int i_n, double *b, double *angles, i
 }
 
 
+*/
 
 void resort (int i, int i_n, std::vector<double> &af_last, double *b, std::vector<cell> &cells, problem_space &ps){
     // moving 
@@ -561,7 +563,7 @@ void resort_wp (std::vector<double> &b, std::vector<double> &af_last, problem_sp
         }
     }
 }
-
+/*
 void sweep_batched(std::vector<double> &af_last, std::vector<double> &af_prev, std::vector<double> &sf, std::vector<cell> &cells, problem_space &ps){
     // sweep the problem batching all angles and groups within a cell
     // can be executed on a GPU or CPU
@@ -653,6 +655,7 @@ void sweep_batched_gpu(rocblas_handle handle, int itter, double* dA, double *db,
     hipFree(dangles);
 }
 
+*/
 
 void quadrature(std::vector<double> &angles, std::vector<double> &weights){
 
@@ -793,15 +796,15 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
     std::vector<double> A (16 * ps.N_groups * ps.N_angles * ps.N_cells);
     
     build_A_fullproblem(A, cells, ps);
-    double *dA, *db;
-    hipMalloc(&dA, sizeof(double)*A.size());         // allocates memory for strided matrix container
-    int sizeb = 4*ps.N_angles*ps.N_groups*ps.N_cells;
-    hipMalloc(&db, sizeof(double)*sizeb);         // allocates memory for strided rhs container
-    hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
+    //double *dA, *db;
+    //hipMalloc(&dA, sizeof(double)*A.size());         // allocates memory for strided matrix container
+    //int sizeb = 4*ps.N_angles*ps.N_groups*ps.N_cells;
+    //hipMalloc(&db, sizeof(double)*sizeb);         // allocates memory for strided rhs container
+    //hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
     
 
-    rocblas_handle handle;
-    rocblas_create_handle(&handle);
+    //rocblas_handle handle;
+    //rocblas_create_handle(&handle);
 
     Timer timer;
 
@@ -816,13 +819,13 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
         // A is in/out for LAPACK functions
         // If we are not going to use the out in an optmiized fassion we need to communicate
         // A every itteration. If it is optimized we only solve it once then do back sub
-        if ( !OPTIMIZED ){
-            hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
-        }
+        //if ( !OPTIMIZED ){
+        //    hipMemcpy(dA, &A[0], sizeof(double)*A.size(), hipMemcpyHostToDevice);
+        //}
 
         //af_2 = af_new;
-        //sweep_normal( af_new, af_previous, sf_new, cells, ps );
-        sweep_batched_gpu( handle, itter, dA, db, af_new, af_previous, sf_new, cells, ps );
+        sweep_normal( af_new, af_previous, sf_new, cells, ps );
+        //sweep_batched_gpu( handle, itter, dA, db, af_new, af_previous, sf_new, cells, ps );
         //sweep_batched( af_2, af_previous, sf_new, cells, ps );
         //check_close(af_new, af_2);
 
@@ -882,10 +885,9 @@ void convergenceLoop(std::vector<double> &af_new,  std::vector<double> &af_previ
     } // end while convergence loop
 
     //destorying A allocations
-    hipFree(dA);
-    hipFree(db);
-    rocblas_destroy_handle( handle );
-
+    //hipFree(dA);
+    //hipFree(db);
+    //rocblas_destroy_handle( handle );
     // timer functions
     ps.time_conv_loop = timer.elapsed();
     ps.av_time_per_itter = timer.elapsed()/itter-1;
@@ -973,11 +975,15 @@ void timeLoop(std::vector<double> af_previous, std::vector<cell> &cells, problem
 
 
 
-//int main(){
-extern "C"{ double ThereforeSweep ( double dx, double dt, int N_angles ) {
+int main(){
+//extern "C"{ double ThereforeSweep ( double dx, double dt, int N_angles ) {
     // testing function
 
     using namespace std;
+
+    double dt = 5;
+    double dx = 0.25;
+    int N_angles = 2;
     
     // problem definition
     // eventually from an input deck
@@ -985,14 +991,14 @@ extern "C"{ double ThereforeSweep ( double dx, double dt, int N_angles ) {
     //int N_angles = 16;
 
     //double dt = 0.1;
-    vector<double> v = {1, .5};
-    vector<double> xsec_total = {1.5454, 0.45468};
-    vector<double> xsec_scatter = {0.61789, 0.072534};
+    vector<double> v = {.25, .5};
+    vector<double> xsec_total = {.5, 0.45468};
+    vector<double> xsec_scatter = {0, 0};
     //vector<double> xsec_scatter = {0,0};
     //double ds = 0.0;
-    vector<double> material_source = {1, 1, 1, 1}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
+    vector<double> material_source = {0,0,0,0}; // isotropic, g1 time_edge g1 time_avg, g2 time_edge, g2 time_avg
 
-    double Length = 100;
+    double Length = 1;
     double IC_homo = 0;
     
     int N_cells = int(Length/dx); //int N_cells = 100; //10
@@ -1068,7 +1074,7 @@ extern "C"{ double ThereforeSweep ( double dx, double dt, int N_angles ) {
         cellCon.v = v;
         cellCon.dt = dt;
         cellCon.material_source = material_source;
-        cellCon.xsec_g2g_scatter = vector<double> {0, .38211, .92724, 0};
+        cellCon.xsec_g2g_scatter = vector<double> {0, 0, 0, 0};
         //cellCon.xsec_g2g_scatter = vector<double> {0, .92747,.38211,  0};
         //cellCon.xsec_g2g_scatter = vector<double> {0, 1, 0, 0};
 
@@ -1089,4 +1095,4 @@ extern "C"{ double ThereforeSweep ( double dx, double dt, int N_angles ) {
 
     return(ps.time_conv_loop);
 } // end of main
-} // end of extern function
+//} // end of extern function

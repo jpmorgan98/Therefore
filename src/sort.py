@@ -12,13 +12,13 @@ def error(vec1, vec2):
     return( np.linalg.norm(vec1 - vec2, ord=2) )
 
 N_angles = 2
-N_cells = 10
+N_cells = 4
 N_groups = 2
 N_time = 1
 
 dt = 0.1
 
-file_name_base = 'afluxUnsorted_therefore'
+file_name_base = 'Sweep_afluxUnsorted'
 file_name_base2 = 'Sweep_afluxUnsorted'
 file_ext = '.csv'
 
@@ -58,15 +58,15 @@ for t in range(N_time):
     af_raw = af_raw[:,0]
 
     # import mms data
-    file2 = file_name_base2+str(t)+file_ext
-    mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
-    mms_raw = mms_raw[:,0]
+    #file2 = file_name_base2+str(t)+file_ext
+    #mms_raw = np.genfromtxt(file2, dtype=np.float64, delimiter=',', skip_header=2)
+    #mms_raw = mms_raw[:,0]
 
-    print( np.allclose(af_raw, mms_raw) ) 
+    #print( np.allclose(af_raw, mms_raw) ) 
     #print()
-    max = np.max(np.abs((af_raw, mms_raw)))
-    print(np.max(np.abs(af_raw-mms_raw)/max))
-    print(np.linalg.norm(af_raw-mms_raw))
+    #max = np.max(np.abs((af_raw, mms_raw)))
+    #print(np.max(np.abs(af_raw-mms_raw)/max))
+    #print(np.linalg.norm(af_raw-mms_raw))
 
     if (af_raw.size != SIZE_problem):
         print(">>>ERROR<<<")
@@ -91,15 +91,14 @@ for t in range(N_time):
                 sf_wp[t*2+1,g,2*i+1] += weights[n] * af_raw[index_start+3]
 
                 
-                af_mms[t*2  ,g,n,2*i]   = mms_raw[index_start]
-                af_mms[t*2  ,g,n,2*i+1] = mms_raw[index_start+1]
-                af_mms[t*2+1,g,n,2*i]   = mms_raw[index_start+2]
-                af_mms[t*2+1,g,n,2*i+1] = mms_raw[index_start+3]
-
-                sf_mms[t*2  ,g,2*i]   += weights[n] * mms_raw[index_start]
-                sf_mms[t*2  ,g,2*i+1] += weights[n] * mms_raw[index_start+1]
-                sf_mms[t*2+1,g,2*i]   += weights[n] * mms_raw[index_start+2]
-                sf_mms[t*2+1,g,2*i+1] += weights[n] * mms_raw[index_start+3]
+                #af_mms[t*2  ,g,n,2*i]   = mms_raw[index_start]
+                #af_mms[t*2  ,g,n,2*i+1] = mms_raw[index_start+1]
+                #af_mms[t*2+1,g,n,2*i]   = mms_raw[index_start+2]
+                #af_mms[t*2+1,g,n,2*i+1] = mms_raw[index_start+3]
+                #sf_mms[t*2  ,g,2*i]   += weights[n] * mms_raw[index_start]
+                #sf_mms[t*2  ,g,2*i+1] += weights[n] * mms_raw[index_start+1]
+                #sf_mms[t*2+1,g,2*i]   += weights[n] * mms_raw[index_start+2]
+                #sf_mms[t*2+1,g,2*i+1] += weights[n] * mms_raw[index_start+3]
 
                 '''
                 mms_cont_raw = np.zeros(4)
@@ -130,6 +129,8 @@ print(error(sf_wp[2,0,:], sf_mms[2,0,:]))
 '''
 #print(sf_mms_cont[0,0,:])
 
+print(af_wp)
+
 temp = np.zeros(2*N_cells)
 for i in range(N_cells*2):
     for n in range(N_angles):
@@ -154,16 +155,16 @@ plt.figure()
 #plt.plot(x, sf_wp[0,1,:], label='g2 --oci')
 
 plt.plot(x, af_wp[0,0,0,:], label='oci')
-plt.plot(x, af_mms[0,0,0,:], label='si')
+#plt.plot(x, af_mms[0,0,0,:], label='si')
 
 plt.plot(x, af_wp[0,0,1,:], label='oci')
-plt.plot(x, af_mms[0,0,1,:], label='si')
+#plt.plot(x, af_mms[0,0,1,:], label='si')
 
-plt.plot(x, af_wp[0,1,0,:], label='oci')
-plt.plot(x, af_mms[0,1,0,:], label='si')
+plt.plot(x, af_wp[1,0,0,:], label='oci')
+#plt.plot(x, af_mms[0,1,0,:], label='si')
 
-plt.plot(x, af_wp[0,1,1,:], label='oci')
-plt.plot(x, af_mms[0,1,1,:], label='si')
+plt.plot(x, af_wp[1,0,1,:], label='oci')
+#plt.plot(x, af_mms[0,1,1,:], label='si')
 
 
 #plt.plot(x, af_mms[0,0,0,:], label='g2 --0')
