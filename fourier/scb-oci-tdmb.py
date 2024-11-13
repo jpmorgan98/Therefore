@@ -11,10 +11,6 @@ N_angle = 8
 
 [angles, weights] = np.polynomial.legendre.leggauss(N_angle)
 
-#angles = angles[N_angle]
-print(angles)
-#weights = weights[:N_angle]
-
 dx = .1
 dt = 1000
 v = 5
@@ -231,10 +227,14 @@ if __name__ == '__main__':
 
     spec_rad = np.zeros([N_dt])
 
-    line_format = ['--r*', '-^k', '--^b', '-g*']
+    line_format = ['--r*', '-^r', '--^r', '-r*']
+    line_format_ev = ['--k*', '-^k', '--^k', '-k*']
     itter = 0
 
     fig, ax = plt.subplots(N_mfp)
+
+    with np.load('spec_rad_numerical.npz') as data:
+        spec_rad_eval = data['spec_rad']
 
     for y in range(mfp_range.size):
         for u in range(c_range.size):
@@ -247,6 +247,7 @@ if __name__ == '__main__':
                 itter += 1
 
             ax[y].plot(dt_range, spec_rad, line_format[u], label="c={}".format(c_range[u]))
+            ax[y].plot(dt_range, spec_rad_eval[:,u,y], line_format_ev[u])
 
         if y == 0:
             ax[y].set_title(r" $v$={1}, $\sigma$={2}, $\lambda \in [0,2\pi]$ (at {3} points), in $S_{4}$ \n mfp = {0}".format(mfp_range[y], v, sigma, N_l, N_angle))
