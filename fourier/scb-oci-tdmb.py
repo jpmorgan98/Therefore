@@ -22,6 +22,8 @@ lam = np.pi*np.linspace(0,2,N_l)
 
 i = complex(0,1)
 
+tol = 1e-13
+
 def Rblockpos(a):
     return(np.array([[angles[a]/2 + dx/2*sigma, -angles[a]/2, dx/(2*v*dt), 0],
                      [angles[a]/2, angles[a]/2 + dx/2*sigma, 0, dx/(2*v*dt)],
@@ -109,6 +111,7 @@ def printProgressBar (iteration, total, prefix = 'Progress:', suffix = 'Complete
 
 def compute():
     spec_rad = np.zeros(N_l)
+    spec_rad_complex = np.zeros(N_l, dtype=np.complex_)
     S = Sbuild()
     R = RBuild()
 
@@ -118,9 +121,13 @@ def compute():
         E = EBuild(l)
         T = np.matmul(RmSinv, E)
         eig_val, stand_eig_mat = np.linalg.eig(T)
-        spec_rad[l] = np.max(np.abs(eig_val))
+        eig_val_abs = np.abs(eig_val)
+        spec_rad_complex[l] = eig_val[eig_val_abs.argmax()]
 
-    return(np.max(spec_rad))
+    spec_rad_abs = np.abs(spec_rad_complex)
+    print(spec_rad_complex[spec_rad_abs.argmax()])
+
+    return(np.max(np.abs(spec_rad_complex)))
 
 
 def plot_const_dt_surf(dt_val):
@@ -226,6 +233,7 @@ if __name__ == '__main__':
     dt_range = np.logspace(-3,1,N_dt)
 
     spec_rad = np.zeros([N_dt])
+    itter_pred = np.zeros((N_dt))
 
     line_format = ['--r*', '-^r', '--^r', '-r*']
     line_format_ev = ['--k*', '-^k', '--^k', '-k*']
@@ -233,8 +241,12 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots(N_mfp)
 
-    with np.load('spec_rad_numerical.npz') as data:
+    with np.load('spec_rad_numerical_3_avg.npz') as data:
         spec_rad_eval = data['spec_rad']
+    with np.load('itter_count_3_nocond.npz') as data:
+        itter_eval = data['itter']
+
+    itter_eval -= 1
 
     for y in range(mfp_range.size):
         for u in range(c_range.size):
@@ -244,10 +256,13 @@ if __name__ == '__main__':
             for k in range(dt_range.size):
                 dt = dt_range[k]
                 spec_rad[k] = compute()
+                itter_pred[k] = math.log(tol)/math.log(spec_rad[k])
                 itter += 1
 
             ax[y].plot(dt_range, spec_rad, line_format[u], label="c={}".format(c_range[u]))
+            #ax[y].plot(dt_range, itter_pred, line_format[u], label="c={}".format(c_range[u]))
             ax[y].plot(dt_range, spec_rad_eval[:,u,y], line_format_ev[u])
+            #ax[y].plot(dt_range, itter_eval[:,u,y], line_format_ev[u])
 
         if y == 0:
             ax[y].set_title(r" $v$={1}, $\sigma$={2}, $\lambda \in [0,2\pi]$ (at {3} points), in $S_{4}$ \n mfp = {0}".format(mfp_range[y], v, sigma, N_l, N_angle))
@@ -257,6 +272,7 @@ if __name__ == '__main__':
         ax[y].set_xlabel(r"$\Delta t$")
         ax[y].set_ylabel(r"$\rho$")
         ax[y].set_xscale("log")
+        #ax[y].set_yscale("log")
         ax[y].set_ylim((-.1, 1.1))
         ax[y].legend()
         ax[y].grid()
@@ -268,6 +284,7 @@ if __name__ == '__main__':
 
     plt.gcf().set_size_inches(11, 8.5)
 
-    plt.savefig("spec_rad_over_dt.pdf")
+    #plt.savefig("spec_rad_over_dt.pdf")
+    plt.show()
     print("")
     # plotting 
