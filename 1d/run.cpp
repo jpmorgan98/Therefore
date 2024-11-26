@@ -1,4 +1,4 @@
-#include "util.h"
+#include "../common/util.h"
 #include "builders.h"
 #include <hip/hip_runtime.h>
 #include "rocsolver.cpp"
