@@ -12,12 +12,12 @@ N_angle = 8
 [angles, weights] = np.polynomial.legendre.leggauss(N_angle)
 
 dx = .1
-dt = 1000
+dt = 100
 v = 5
 sigma = 4.0
 sigma_s = sigma*.5
 
-N_l = 15
+N_l = 100
 lam = np.pi*np.linspace(0,2,N_l)
 
 i = complex(0,1)
@@ -181,6 +181,8 @@ def plot_const_dt_surf(dt_val):
 
 if __name__ == '__main__':
 
+    """
+
     dt = 1000
     N_mfp = 25
     N_c = 25
@@ -224,6 +226,8 @@ if __name__ == '__main__':
     ax.set_title(r"$\rho$ for $\Delta t$={0}, $v$={1}, $\sigma$={2}, $\lambda \in [0,2\pi]$ (at {3} points), in $S_{4}$".format(dt, v, sigma, N_l, N_angle))
     plt.show()
 
+    """
+
     N_mfp = 3
     N_c = 4
     N_dt = 15
@@ -259,32 +263,42 @@ if __name__ == '__main__':
                 itter_pred[k] = math.log(tol)/math.log(spec_rad[k])
                 itter += 1
 
-            ax[y].plot(dt_range, spec_rad, line_format[u], label="c={}".format(c_range[u]))
+            if y == 0:
+                ax[y].plot(dt_range, spec_rad, line_format_ev[u], label="c={}".format(c_range[u]))
+                
+            else:
+                ax[y].plot(dt_range, spec_rad, line_format_ev[u])
             #ax[y].plot(dt_range, itter_pred, line_format[u], label="c={}".format(c_range[u]))
-            ax[y].plot(dt_range, spec_rad_eval[:,u,y], line_format_ev[u])
+            #ax[y].plot(dt_range, spec_rad_eval[:,u,y], line_format_ev[u])
             #ax[y].plot(dt_range, itter_eval[:,u,y], line_format_ev[u])
 
-        if y == 0:
-            ax[y].set_title(r" $v$={1}, $\sigma$={2}, $\lambda \in [0,2\pi]$ (at {3} points), in $S_{4}$ \n mfp = {0}".format(mfp_range[y], v, sigma, N_l, N_angle))
-        else: 
-            ax[y].set_title("mfp = {0}".format(mfp_range[y]))
+        #if y == 0:
+        #    plt.legend() #ax[y].set_title(r" $v$={1}, $\sigma$={2}, $\lambda \in [0,2\pi]$ (at {3} points), in $S_{4}$ \n mfp = {0}".format(mfp_range[y], v, sigma, N_l, N_angle))
+        #else: 
+        ax[y].set_title(r"$\delta =$ {0}".format(mfp_range[y]))
 
         ax[y].set_xlabel(r"$\Delta t$")
         ax[y].set_ylabel(r"$\rho$")
         ax[y].set_xscale("log")
         #ax[y].set_yscale("log")
         ax[y].set_ylim((-.1, 1.1))
-        ax[y].legend()
         ax[y].grid()
-    
+
+    #ax[0].annotate(r'$c=${}'.format(c_range[3]), xy=(3, 0.85))
+    #ax[0].annotate(r'$c=${}'.format(c_range[2]), xy=(3, 0.4))
+    #ax[0].annotate(r'$c=${}'.format(c_range[1]), xy=(3, 0.15))
+    #ax[0].annotate(r'$c=${}'.format(c_range[0]), xy=(3, -0.075))
+
     for axs in ax.flat:
         axs.label_outer()
     
     fig.tight_layout()
 
-    plt.gcf().set_size_inches(11, 8.5)
+    ax[0].legend()
 
-    #plt.savefig("spec_rad_over_dt.pdf")
-    plt.show()
-    print("")
+    plt.gcf().set_size_inches(6.5, 6.5)
+
+    plt.savefig("spec_rad_over_dt.pdf")
+    #plt.show()
+    #print("")
     # plotting 
