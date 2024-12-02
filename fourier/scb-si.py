@@ -24,44 +24,23 @@ sigmas = .5
 
 i = complex(0,1)
 
-def Rblockpos(mu):
+def Rblockpos(mu, l):
     return(
         np.array([[mu/2+sigma*dx/2, -mu/2],
-                  [mu/2, mu/2+sigma*dx/2]])
+                  [mu/2-mu*np.exp(-i*sigma*lam[l]*dx), mu/2+sigma*dx/2]])
     )
-def Rblockneg(mu):
+def Rblockneg(mu, l):
     return(
-        np.array([[-mu/2 + sigma*dx/2, -mu/2],
+        np.array([[-mu/2 + sigma*dx/2, -mu/2+mu*np.exp(i*sigma*lam[l]*dx)],
                   [mu/2, -mu/2 + sigma*dx/2]])
     )
-def Rbuild():
+def Rbuild(l):
     A = np.zeros((2*N_angle, 2*N_angle),dtype=np.complex_)
     for a in range(N_angle):
         if angles[a] > 0:
-            A[a*2:(a+1)*2,a*2:(a+1)*2] = Rblockpos(angles[a])
+            A[a*2:(a+1)*2,a*2:(a+1)*2] = Rblockpos(angles[a], l)
         elif (angles[a] < 0):
-            A[a*2:(a+1)*2,a*2:(a+1)*2] = Rblockneg(angles[a])
-    return(A)
-
-
-
-def Eblockpos(mu, lamv):
-    return(
-        np.array([[0,0],
-                  [mu*np.exp(-i*sigma*lamv*dx),0]])
-    )
-def Eblockneg(mu, lamv):
-    return(
-        np.array([[0,-mu*np.exp(i*lamv*sigma*dx)],
-                  [0,0]])
-    )
-def Ebuild(l):
-    A = np.zeros((2*N_angle, 2*N_angle),dtype=np.complex_)
-    for a in range(N_angle):
-        if   angles[a] > 0:
-            A[a*2:(a+1)*2,a*2:(a+1)*2] = Eblockpos(angles[a],l)
-        elif angles[a] < 0:
-            A[a*2:(a+1)*2,a*2:(a+1)*2] = Eblockneg(angles[a],l)
+            A[a*2:(a+1)*2,a*2:(a+1)*2] = Rblockneg(angles[a], l)
     return(A)
 
 
@@ -86,14 +65,13 @@ def eig_val():
 
     eig_lam = np.zeros(1).astype(np.complex_)
 
-    R = Rbuild()
     S = Sbuild()
 
-    Rinv = np.linalg.inv(R-S)
-
     for i in range(N_lam):
-        E = Ebuild(lam[i])
-        T =  np.matmul(Rinv, E)
+        R = Rbuild(i)
+        Rinv = np.linalg.inv(R)
+        T =  np.matmul(Rinv, S)
+
         eig_val, stand_eig_mat = np.linalg.eig(T)
 
         eig_lam = np.append(eig_lam, eig_val)
@@ -112,8 +90,6 @@ if __name__ == '__main__':
     dx = mfp/sigma
     sigmas = scat*sigma
     print( eig_val() )
-
-    exit()
 
 
     N_mfp = 25
