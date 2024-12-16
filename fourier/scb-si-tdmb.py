@@ -17,7 +17,7 @@ v = 5
 sigma = 4.0
 sigma_s = sigma*.5
 
-N_l = 25
+N_l = 1000
 lam = np.pi*np.linspace(0,2,N_l)
 
 i = complex(0,1)
@@ -116,6 +116,7 @@ def compute():
     R = RBuild()
 
     Rinv = np.linalg.inv(R)
+    eig_vals = np.array([0.0]).astype(np.complex_)
 
     for l in range(N_l):
         E = EBuild(l)
@@ -123,11 +124,13 @@ def compute():
         RinvE = np.linalg.inv(R-E)
         T = np.matmul(RinvE, S)
         eig_val, stand_eig_mat = np.linalg.eig(T)
-        eig_val_abs = np.abs(eig_val)
-        spec_rad_complex[l] = eig_val[eig_val_abs.argmax()]
+        eig_vals = np.append(eig_vals, eig_val)
 
-    spec_rad_abs = np.abs(spec_rad_complex)
-    print(spec_rad_complex[spec_rad_abs.argmax()])
+
+    plt.plot(eig_vals.real, eig_vals.imag, 'k.') 
+    plt.ylabel('Imaginary') 
+    plt.xlabel('Real') 
+    plt.show()
 
     return(np.max(np.abs(spec_rad_complex)))
 
@@ -183,6 +186,22 @@ def plot_const_dt_surf(dt_val):
 
 if __name__ == '__main__':
 
+    dt_range = np.array([100, 10, 1, 0.1])
+    mfp_range = np.array([0.1, 1.0, 10])
+    c = .25
+    sigma_s = c*sigma
+
+    for m in range(dt_range.size):
+        for j in range(mfp_range.size):
+            dt = dt_range[m]
+            dx = mfp_range[j]/sigma
+
+            spec = compute()
+
+            print("dt {}, mfp {}, spec rad {}".format(dt, mfp_range[j], spec))
+
+    exit()
+
     dt = 1000
     N_mfp = 25
     N_c = 25
@@ -225,6 +244,7 @@ if __name__ == '__main__':
     ax.set_zlabel(r"$\rho$")
     ax.set_title(r"$\rho$ for $\Delta t$={0}, $v$={1}, $\sigma$={2}, $\lambda \in [0,2\pi]$ (at {3} points), in $S_{4}$".format(dt, v, sigma, N_l, N_angle))
     plt.show()
+
 
     N_mfp = 3
     N_c = 4

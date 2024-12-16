@@ -1,82 +1,80 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-with np.load('runtimes.npz') as data:
+with np.load('runtimes_mt.npz') as data:
     OCI = data['OCI']
     Sweep = data['Sweep']
     dx = data['dx']
+    dt = data['dt']
+    angles = data['angles']
+
+
+with np.load('runtimes_iter.npz') as data:
+    OCI_iter = data['OCI']
+    Sweep_iter = data['Sweep']
+    #dx = data['dx']
+    #dt = data['dt']
+    #angles = data['angles']
+
+print(dt.size)
 
 # throwing out first run (spool up and repeated)
 dx = dx[1:]
-OCI = OCI[1:,:]
-Sweep = Sweep[1:,:]
+
+OCI = OCI[:,:,1:]
+Sweep = Sweep[:,:,1:]
+speedup = Sweep/OCI
+
+OCI_iter = OCI_iter[:,:,1:]
+Sweep_iter = Sweep_iter[:,:,1:]
 
 mfp = dx*0.45468
 
-fig, axs = plt.subplots(2, 2, constrained_layout=True)
-axs[0, 0].plot(mfp, OCI[:,0], 'k')
-axs[0, 0].plot(mfp, Sweep[:,0], 'b-*')
-axs[0, 0].set_title(r'$S_{4}$')
-axs[0, 0].set_yscale('log')
-axs[0, 0].set_xscale('log')
 
-axs[0, 1].plot(mfp, OCI[:,1], 'k')
-axs[0, 1].plot(mfp, Sweep[:,1], 'b-*')
-axs[0, 1].set_title(r'$S_{8}$')
-axs[0, 1].set_yscale('log')
-axs[0, 1].set_xscale('log')
+color_si = '#ca0020'
+color_oci = '#404040'
+color_speedup = '#7b3294'
 
-axs[1, 0].plot(mfp, OCI[:,2], 'k')
-axs[1, 0].plot(mfp, Sweep[:,2], 'b-*')
-axs[1, 0].set_title(r'$S_{16}$')
-axs[1, 0].set_yscale('log')
-axs[1, 0].set_xscale('log')
+for i in range(2):
+    fig, axs = plt.subplots(4, 2, constrained_layout=True)
+    for j in range (4):
+        axs[0+j, 0].plot(mfp, OCI[i,j,:], '^-', color= color_oci, linewidth=2.5)
+        axs[0+j, 0].plot(mfp, Sweep[i,j,:], '--*', color=color_si, linewidth=2.5)
+        axs[0+j, 0].set_yscale('log')
+        axs[0+j, 0].set_xscale('log')
+        axs[0+j, 0].set_ylabel('S{0} \n runtime [s]'.format(angles[j]))
 
-axs[1, 1].plot(mfp, OCI[:,3], 'k')
-axs[1, 1].plot(mfp, Sweep[:,3], 'b-*')
-axs[1, 1].set_yscale('log')
-axs[1, 1].set_xscale('log')
-axs[1, 1].set_title(r'$S_{32}$')
+        axs[0+j, 1].plot(mfp, speedup[i,j,:], '-.', color=color_speedup, linewidth=2.5)
+        #axs[0+j, 1].set_yscale('log')
+        axs[0+j, 1].set_xscale('log')
+        axs[0+j, 1].set_ylabel('speedup')
 
+        #axs[0+j, 2].plot(mfp, OCI_iter[i,j,:], '-', color= color_oci, linewidth=2.5)
+        #axs[0+j, 2].plot(mfp, Sweep_iter[i,j,:], '--', color=color_si, linewidth=2.5)
+        #axs[0+j, 2].set_yscale('log')
+        #axs[0+j, 2].set_xscale('log')
+        #axs[0+j, 2].set_ylabel('iteration'.format(angles[j]))
 
-for ax in axs.flat:
-    ax.set(xlabel=r'mfp [$\Sigma_2 * \Delta x$]', ylabel='wall-clock runtime [s]')
+        axs[j,0].grid()
+        axs[j,1].grid()
+        #axs[j,2].grid()
 
-# Hide x labels and tick labels for top plots and y ticks for right plots.
-#for ax in axs.flat:
-#    ax.label_outer()
-
-plt.savefig("runtimes.pdf")
-plt.close()
-
-# Speedup
-
-speedup = Sweep/OCI
-fig, axs = plt.subplots(2, 2, constrained_layout=True)
-
-axs[0, 0].plot(mfp, speedup[:,0], 'r-^')
-axs[0, 0].set_title(r'$S_{4}$')
-axs[0, 0].set_xscale('log')
-
-axs[0, 1].plot(mfp, speedup[:,1], 'r-^')
-axs[0, 1].set_title(r'$S_{8}$')
-axs[0, 1].set_xscale('log')
-
-axs[1, 0].plot(mfp, speedup[:,2], 'r^-')
-axs[1, 0].set_title(r'$S_{16}$')
-axs[1, 0].set_xscale('log')
-
-axs[1, 1].plot(mfp, speedup[:,3], 'r-^')
-axs[1, 1].set_xscale('log')
-axs[1, 1].set_title(r'$S_{32}$')
+        #if (j<3):
+        #    axs[j,0].set_xticks([])
+        #    axs[j,1].set_xticks([])
+            #axs[j,2].set_xticks([])
 
 
-for ax in axs.flat:
-    ax.set(xlabel=r'mfp [$\Sigma_2 * \Delta x$]', ylabel='speedup [s]')
+    axs[3,0].set(xlabel=r'$\delta$ [$\Sigma_2\Delta x$]')
+    axs[3,1].set(xlabel=r'$\delta$ [$\Sigma_2\Delta x$]')
+    #axs[3,2].set(xlabel=r'$\delta$ [$\Sigma_2\Delta x$]')
 
-# Hide x labels and tick labels for top plots and y ticks for right plots.
-#for ax in axs.flat:
-#    ax.label_outer()
+    if (i==0):
+        axs[0, 0].text(5e-3, 1e-2, 'OCI', style='italic',) #bbox={'facecolor': color_oci, 'alpha': 0.5, 'pad': 1})
+        axs[0, 0].text(1e0, 1e0, 'SI', style='italic',)# bbox={'facecolor': color_si, 'alpha': 0.5, 'pad': 1})
+    else:
+        axs[0, 0].text(5e-3, 1e-2, 'OCI', style='italic',) #bbox={'facecolor': color_oci, 'alpha': 0.5, 'pad': 1})
+        axs[0, 0].text(1e0, 1e-1, 'SI', style='italic',)# bbox={'facecolor': color_si, 'alpha': 0.5, 'pad': 1})
 
-plt.savefig("speedup.pdf")
-
+    plt.savefig("runtimes_{}.pdf".format(dt[i]))
+    #plt.clf()

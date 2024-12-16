@@ -15,7 +15,7 @@ N_angle = 8
 #angles = angles[N_angle:]
 #weights = weights[N_angle:]
 
-N_lam = 100
+N_lam = 25
 lam = np.pi*np.linspace(0,2,N_lam)
 
 dx = 1
@@ -85,13 +85,13 @@ def eig_val():
 
 
 if __name__ == '__main__':
-    mfp = .1
+    mfp = .01
     scat = 1.0
     dx = mfp/sigma
     sigmas = scat*sigma
     print( eig_val() )
 
-
+    #exit()
     N_mfp = 25
     N_c = 30
 

@@ -12,10 +12,12 @@ N_angle = 8
 
 [angles, weights] = np.polynomial.legendre.leggauss(N_angle)
 
+#angles = np.array([-0.25,0.25])
+
 dx = .1
-dt = 1000
+dt = 250
 v = 5
-sigma = 4.0
+sigma = 1.0
 sigma_s = sigma*.5
 
 N_l = 10000
@@ -123,15 +125,25 @@ def compute():
     for l in range(N_l):
         E = EBuild(l)
         T = np.matmul(RmSinv, E)
+        
         eig_val, stand_eig_mat = np.linalg.eig(T)
 
         eig_vals = np.append(eig_vals, eig_val, axis=0)
 
     # plot the complex numbers 
-    #plt.plot(eig_vals.real, eig_vals.imag, 'k.') 
-    #plt.ylabel('Imaginary') 
-    #plt.xlabel('Real') 
+    max_eigval = eig_vals[np.abs(eig_vals).argmax()]
+
+    print(max_eigval)
+
+    plt.plot(eig_vals.real, eig_vals.imag, 'k.') 
+    plt.plot(max_eigval.real, max_eigval.imag, 'rX', markersize=15, label=r'$\rho$ ({})'.format(np.abs(max_eigval)))
+    plt.ylabel('Imaginary') 
+    plt.xlabel('Real') 
+    plt.title(r"Eigenvalues of OCI-SCB-TDMB ($\Delta t =${}, $\delta =${}, $c=${})".format(dt, dx*sigma, sigma_s/sigma))
+    plt.legend()
     #plt.show()
+    plt.savefig("eigplots/c{}/mfp{}dt{}c{}.png".format(sigma_s/sigma, dx*sigma, dt, sigma_s/sigma))
+    plt.clf()
 
     #mags = np.abs(eig_vals)
 
@@ -162,20 +174,61 @@ def compute():
 #def plot_dt():
 
 
+def computeSI():
+    spec_rad = np.zeros(N_l)
+    spec_rad_complex = np.zeros(N_l, dtype=np.complex_)
+    S = Sbuild()
+    R = RBuild()
+
+    eig_vals = np.zeros((1), dtype=np.complex_)
+
+    for l in range(N_l):
+        E = EBuild(l)
+        RmEinv = np.linalg.inv(R-E)
+        T = np.matmul(RmEinv, S)
+        eig_val, stand_eig_mat = np.linalg.eig(T)
+        eig_vals = np.append(eig_vals, eig_val, axis=0)
+
+    max_eigval = eig_vals[np.abs(eig_vals).argmax()]
+
+    plt.plot(eig_vals.real, eig_vals.imag, 'k.') 
+    plt.plot(max_eigval.real, max_eigval.imag, 'rX', markersize=15, label=r'$\rho$')
+    plt.ylabel('Imaginary') 
+    plt.xlabel('Real') 
+    plt.title(r"Eigenvalues of SI-SCB-TDMB ($\Delta t =${}, $\delta =${}, $c=${})".format(dt, dx*sigma, sigma_s/sigma))
+    plt.legend()
+    plt.savefig("eigplots/si/c{}/mfp{}dt{}c{}.png".format(sigma_s/sigma, dx*sigma, dt, sigma_s/sigma))
+    plt.clf()
+
+    return(np.max(np.abs(eig_vals)))
+
+
 if __name__ == '__main__':
 
+    sigma_s = 0.997*sigma
+    dt = .1
+    dx = .25
+
+    #spec = compute()
+
+    #exit()
+
     dt_range = np.array([100, 10, 1, 0.1])
-    mfp = np.array([0.1, 1.0, 10])
+    mfp = np.array([0.01, 1.0, 10])
+    c_range = np.array([0, 0.5, 1.0])
     c = 1
     sigma_s = c*sigma
 
-    for m in range(dt_range.size):
-        for j in range(mfp.size):
-            dt = dt_range[m]
-            dx = mfp[j]/sigma
+    for k in range (c_range.size):
+        for m in range(dt_range.size):
+            for j in range(mfp.size):
+                sigma_s = c_range[k]*sigma
+                dt = dt_range[m]
+                dx = mfp[j]/sigma
 
-            spec = compute()
+                spec = compute()
+                spec_si = computeSI()
 
-            print("dt {}, mfp {}, spec rad {}".format(dt, mfp[j], spec))
+                print("c {}, dt {}, mfp {}, spec rad {} and {}".format(c_range[k], dt, mfp[j], spec, spec_si))
 
     # plotting 

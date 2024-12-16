@@ -125,7 +125,27 @@ def compute():
         spec_rad_complex[l] = eig_val[eig_val_abs.argmax()]
 
     spec_rad_abs = np.abs(spec_rad_complex)
-    print(spec_rad_complex[spec_rad_abs.argmax()])
+
+    
+
+    return(np.max(np.abs(spec_rad_complex)))
+
+
+def computeSI():
+    spec_rad = np.zeros(N_l)
+    spec_rad_complex = np.zeros(N_l, dtype=np.complex_)
+    S = Sbuild()
+    R = RBuild()
+
+    for l in range(N_l):
+        E = EBuild(l)
+        RmEinv = np.linalg.inv(R-E)
+        T = np.matmul(RmEinv, S)
+        eig_val, stand_eig_mat = np.linalg.eig(T)
+        eig_val_abs = np.abs(eig_val)
+        spec_rad_complex[l] = eig_val[eig_val_abs.argmax()]
+
+    spec_rad_abs = np.abs(spec_rad_complex)
 
     return(np.max(np.abs(spec_rad_complex)))
 
@@ -181,8 +201,8 @@ def plot_const_dt_surf(dt_val):
 
 if __name__ == '__main__':
 
+    
     """
-
     dt = 1000
     N_mfp = 25
     N_c = 25
@@ -233,14 +253,19 @@ if __name__ == '__main__':
     N_dt = 15
 
     mfp_range = np.array((10, 1, .1))
-    c_range = np.array((0.5, 0.75, 0.9, 0.99))
+    c_range = np.array((0.5, 0.75, 0.99))
     dt_range = np.logspace(-3,1,N_dt)
 
     spec_rad = np.zeros([N_dt])
+    spec_rad_si = np.zeros([N_dt])
     itter_pred = np.zeros((N_dt))
 
-    line_format = ['--r*', '-^r', '--^r', '-r*']
-    line_format_ev = ['--k*', '-^k', '--^k', '-k*']
+    line_format = ['-.', '-', '--', '-*']
+    line_color = ['#d95f02', '#7570b3']
+    line_color2= ['#af8dc3', '#7fbf7b']
+    color_si = '#ca0020'
+    color_oci = '#404040'
+    line_format_ev = ['-.', '-', '--', '-*']
     itter = 0
 
     fig, ax = plt.subplots(N_mfp)
@@ -260,15 +285,17 @@ if __name__ == '__main__':
             for k in range(dt_range.size):
                 dt = dt_range[k]
                 spec_rad[k] = compute()
+                spec_rad_si[k] = computeSI()
                 itter_pred[k] = math.log(tol)/math.log(spec_rad[k])
                 itter += 1
 
             if y == 0:
-                ax[y].plot(dt_range, spec_rad, line_format_ev[u], label="c={}".format(c_range[u]))
+                ax[y].plot(dt_range, spec_rad, line_format_ev[u], color=color_oci, linewidth=2.5, label="c={}".format(c_range[u]))
                 
             else:
-                ax[y].plot(dt_range, spec_rad, line_format_ev[u])
-            #ax[y].plot(dt_range, itter_pred, line_format[u], label="c={}".format(c_range[u]))
+                ax[y].plot(dt_range, spec_rad, line_format_ev[u], linewidth=2.5, color=color_oci,)
+            
+            ax[y].plot(dt_range, spec_rad_si, line_format[u], linewidth=2.5, color=color_si,)
             #ax[y].plot(dt_range, spec_rad_eval[:,u,y], line_format_ev[u])
             #ax[y].plot(dt_range, itter_eval[:,u,y], line_format_ev[u])
 
@@ -277,7 +304,7 @@ if __name__ == '__main__':
         #else: 
         ax[y].set_title(r"$\delta =$ {0}".format(mfp_range[y]))
 
-        ax[y].set_xlabel(r"$\Delta t$")
+        ax[y].set_xlabel(r"$\Delta t$ ")
         ax[y].set_ylabel(r"$\rho$")
         ax[y].set_xscale("log")
         #ax[y].set_yscale("log")
@@ -295,6 +322,10 @@ if __name__ == '__main__':
     fig.tight_layout()
 
     ax[0].legend()
+
+    ax[2].text(5e-3, .6, 'OCI', style='italic', )#bbox={'facecolor': color_oci, 'alpha': 0.5, 'pad': 5})
+    
+    ax[2].text(5e-1, .25, 'SI', style='italic', )#bbox={'facecolor': color_si, 'alpha': 0.5, 'pad': 5})
 
     plt.gcf().set_size_inches(6.5, 6.5)
 
