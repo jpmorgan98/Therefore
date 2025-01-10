@@ -73,29 +73,60 @@ def scatter_source(dx, xsec_scattering, N, w):
 
 
 
-xsec = .25
-scattering_ratio = 0.25
+def DMD_est(Yminus, Yplus, N, K = 10):
+    
+           
+    #compute svd
+    [u,s,v] = np.linalg.svd(Yminus,full_matrices=True)
+    #find the non-zero singular values
+    if (N > 1) and (s[(1-np.cumsum(s)/np.sum(s)) > 1.e-12].size >= 1):
+        spos = s[(1-np.cumsum(s)/np.sum(s)) > 1.e-12].copy()
+    else:
+        spos = s.copy()
+    #create diagonal matrix
+    mat_size = np.min([K,len(spos)])
+    S = np.zeros((mat_size,mat_size))
+   
+    #select the u and v that correspond with the nonzero singular values
+    unew = 1.0*u[:,0:mat_size]
+    vnew = 1.0*v[0:mat_size,:]
+    #S will be the inverse of the singular value diagonal matrix
+    S[np.diag_indices(mat_size)] = 1/spos
+
+    #the approximate A operator is Ut A U = Ut Y+ V S
+    part1 = np.dot(np.matrix(unew).getH(),Yplus)
+    part2 = np.dot(part1,np.matrix(vnew).getH())
+    Atilde = np.dot(part2,np.matrix(S).getH())
+
+    return Atilde
+
+
+xsec = 0
+scattering_ratio = 0.9
 xsec_scattering = xsec*scattering_ratio
 
 printer = False
 printer_TS = False
 
-dx = 0.1
-L = 10
+mfp = 0.25
+
+dx = mfp/xsec
+L = 100
 N = int(L/dx)
+print(N)
 N_mesh = int(2*N)
 Q = 0
 
-N_angles = 4
+N_angles = 2
 
 dt = 0.1
-max_time = 5 #dt*(N_time-1)
-N_time = int(max_time/dt)
+max_time = 1 #dt*(N_time-1)
+N_time = 2
 
-v = 1
+v = 5
 
 #BCs incident iso
-BCl = 0.5
+BCl = 0
 BCr = 0
 
 angular_flux      = np.zeros([2, N_mesh])
@@ -115,12 +146,10 @@ N_angle = N_angles
 #w2 = 1
 #w = np.array([w1, w2])
 
-tol = 1e-9
+tol = 1e-13
 error = 1
-max_itter = 100000
+max_itter = int(1e4)
 
-manaz = dx*xsec_scattering/4
-gamma = xsec*dx/2
 
 final_angular_flux_solution = np.zeros([N_time, N_angle, N_mesh])
 final_angular_flux_midstep_solution = np.zeros([N_time, N_angle, N_mesh])
@@ -144,20 +173,25 @@ for k in range(1, N_time, 1):
     angular_flux_midstep = np.zeros([N_angles, N_mesh])
     angular_flux_midstep_last = np.zeros([N_angles, N_mesh])   # last refers to last iteration
 
+    aflux_raw = np.zeros(4*N_angle*N_mesh)
+
     #initial guesses?
     itter = 0
-    error_eos = 1
-    while error_eos > tol and max_itter > itter:
+    error = 1
+    error_last = 1
+    converged = False
+
+    aflux_raw_last = np.random.random(N_mesh*N_angles*4)
+
+    spec_rad = np.zeros(1)
+
+    aflux_list = np.zeros(1)
+
+    while not converged:
+
         #print(itter)
         if itter == max_itter:
             print('Crap: {0}'.format(k))
-
-        if (printer):
-            print()
-            print("========================================")
-            print("next cycle: {0}".format(itter))
-            print("========================================")
-            print()
 
         # OCI
         for i in range(N):
@@ -178,8 +212,8 @@ for k in range(1, N_time, 1):
                         psi_rightBound          = BCr
                         psi_halfNext_rightBound = BCr
                     else:
-                        psi_rightBound          = angular_flux_last[m, i_r+1]
-                        psi_halfNext_rightBound = angular_flux_midstep_last[m, i_r+1] 
+                        psi_rightBound          = aflux_raw_last[4*N_angles*(i+1) + 4*m + 0]
+                        psi_halfNext_rightBound = aflux_raw_last[4*N_angles*(i+1) + 4*m + 2] 
 
                     A_small = A_neg(dx, v, dt, angles[m], xsec)
                     c_small = c_neg(dx, v, dt, angles[m], Q, Q, Q, Q, psi_halfLast_L, psi_halfLast_R, psi_rightBound, psi_halfNext_rightBound)
@@ -189,8 +223,8 @@ for k in range(1, N_time, 1):
                         psi_leftBound           = BCl
                         psi_halfNext_leftBound  = BCl
                     else:
-                        psi_leftBound           = angular_flux_last[m, i_l-1]
-                        psi_halfNext_leftBound  = angular_flux_midstep_last[m, i_l-1]
+                        psi_leftBound           = aflux_raw_last[4*N_angles*(i-1) + 4*m + 1]
+                        psi_halfNext_leftBound  = aflux_raw_last[4*N_angles*(i-1) + 4*m + 3]
 
                     A_small = A_pos(dx, v, dt, angles[m], xsec)
                     c_small = c_pos(dx, v, dt, angles[m], Q, Q, Q, Q, psi_halfLast_L, psi_halfLast_R, psi_leftBound, psi_halfNext_leftBound)
@@ -201,59 +235,91 @@ for k in range(1, N_time, 1):
                 A[m*4:(m+1)*4, m*4:(m+1)*4] = A_small
                 c[m*4:(m+1)*4] = c_small
 
-                S = scatter_source(dx, xsec_scattering, N_angle, weights)
+            S = scatter_source(dx, xsec_scattering, N_angle, weights)
 
-                A = A - S
+            A = A - S
 
-            if (printer):
-                print("Large cell {0}".format(i))
-                print('>>> psi_right bound (BC) <<<')
-                print(psi_rightBound)
-                print()
-                print('>>> c vector <<<')
-                print(c)
-                print()
-                print('>>> full A mat <<<')
-                print(A)
-                print()
-
-            angular_flux_raw = np.linalg.solve(A,c)
+            aflux_raw_small = np.linalg.solve(A,c)
 
             # resorting into proper locations in solution vectors
             for p in range(N_angle):
-                angular_flux[p,i_l]         = angular_flux_raw[4*p]
-                angular_flux[p,i_r]         = angular_flux_raw[4*p+1]
+                angular_flux[p,i_l]         = aflux_raw_small[4*p]
+                angular_flux[p,i_r]         = aflux_raw_small[4*p+1]
                 
-                angular_flux_midstep[p,i_l] = angular_flux_raw[4*p+2]
-                angular_flux_midstep[p,i_r] = angular_flux_raw[4*p+3]
+                angular_flux_midstep[p,i_l] = aflux_raw_small[4*p+2]
+                angular_flux_midstep[p,i_r] = aflux_raw_small[4*p+3]
 
-            if (printer):
-                print('>>> raw solution <<<')
-                print(angular_flux_raw)
-                print()
-                print('>>> angular flux eos reorganized <<<')
-                print(angular_flux)
-                print()
-                print('>>> angular flux mid step reorganized <<<')
-                print(angular_flux_midstep)
-                print()
+            for p in range(N_angles):
+                aflux_raw[4*N_angles*(i) + 4*p + 0] = aflux_raw_small[4*p + 0]
+                aflux_raw[4*N_angles*(i) + 4*p + 1] = aflux_raw_small[4*p + 1]
+                aflux_raw[4*N_angles*(i) + 4*p + 2] = aflux_raw_small[4*p + 2]
+                aflux_raw[4*N_angles*(i) + 4*p + 3] = aflux_raw_small[4*p + 3]
 
-        # TODO: Error
-        if itter > 2:
-            error_eos = np.linalg.norm(angular_flux_midstep - angular_flux_midstep_last, ord=2)
-            error_mos = np.linalg.norm(angular_flux - angular_flux_last, ord=2)
+        if itter > 1:
+            error = np.linalg.norm(aflux_raw-0, 2)
+
+        spec_rad = np.append(spec_rad,error/error_last)
+
+        #if ((aflux_raw==aflux_raw_last).all):
+        #    print("warning, no itteration")
+
+        if error<tol*(1-spec_rad[-1]):
+            converged = True
+
+        aflux_raw_last = aflux_raw.copy()
+        error_last = error
 
         final_angular_flux_solution[k, :, :] = angular_flux
         final_angular_flux_midstep_solution[k, :, :] = angular_flux_midstep
             
-        angular_flux_last = angular_flux 
+        angular_flux_last_raw = angular_flux 
         angular_flux_midstep_last = angular_flux_midstep
 
-        itter += 1 
-    print(itter)
+        print("l {}, ρ {}, error {}".format(itter, spec_rad[-1], error))
 
-    #print(itter)
+        itter += 1
 
+        aflux_list = np.append(aflux_list,aflux_raw)
+
+aflux_list = aflux_list[1:]
+spec_rad = spec_rad[1:]
+
+K = itter-1
+
+Yplus = np.zeros((N,K-1))
+Yminus = np.zeros((N,K-1))
+
+for k in range(K):
+    x_new = aflux_list[N*(k-K-1):N*(k-K)]
+
+    if (k < K-1):
+        Yminus[:,k] = x_new
+    if (k>0):
+        Yplus[:,k-1] = x_new
+
+
+Atilde = DMD_est(Yminus, Yplus, N, K = itter-1)
+
+
+eig, eig_vec = np.linalg.eig(Atilde)
+
+
+x = np.linspace(0,spec_rad.size, spec_rad.size)
+
+
+plt.figure(2)
+plt.plot(eig.real, eig.imag, 'k.')
+#plt.ylim(-0.1,1)
+plt.show()
+
+plt.figure()
+plt.plot(x, spec_rad)
+plt.ylim(-0.1,1)
+plt.show()
+
+
+
+'''
 final_scalar_flux = np.zeros([N_time, N_mesh])
 
 for i in range(N_time):
@@ -265,7 +331,7 @@ X = np.linspace(0, L, int(N_mesh))
 
 X = np.linspace(0, L, int(N_mesh))
 
-'''
+
 f=1
 plt.figure(f)
 plt.plot(X, final_angular_flux_solution[1, 1,:],  '--*g', label='0')
@@ -283,7 +349,7 @@ plt.xlabel('Distance')
 plt.ylabel('Angular Flux')
 plt.legend()
 #plt.show()
-plt.savefig('Test Angular flux')'''
+plt.savefig('Test Angular flux')
 
 import scipy.special as sc
 def phi_(x,t):
@@ -306,6 +372,7 @@ def analitical(x, t):
         y[i] = psi_(x[i],t)
     return y
 
+
 import matplotlib.animation as animation
 
 fig,ax = plt.subplots() #plt.figure(figsize=(6,4))
@@ -316,21 +383,22 @@ ax.set_ylabel(r'$\psi$')
 ax.set_title('Angular Flux (ψ)')
 
 line1, = ax.plot(X, final_scalar_flux[0,:], '-k',label="MB-SCB")
-line2, = ax.plot(X, analitical(X,0), '--*g',label="Ref")
+#line2, = ax.plot(X, analitical(X,0), '--*g',label="Ref")
 text   = ax.text(8.0,0.75,'') #, transform=ax.transAxes
 ax.legend()
 plt.ylim(-0.2, 1.5) #, OCI_soultion[:,0], AZURV1_soultion[:,0]
 
 def animate(k):
     line1.set_ydata(final_scalar_flux[k,:])
-    line2.set_ydata(analitical(X,k*dt))
+    #line2.set_ydata(analitical(X,k*dt))
     #ax.set_title(f'Scalar Flux (ϕ) at t=%.1f'.format(dt*k)) #$\bar{\phi}_{k,j}$ with 
     text.set_text(r'$t \in [%.1f,%.1f]$ s'%(dt*k,dt*(k+1)))
     #print('Figure production percent done: {0}'.format(int(k/N_time)*100), end = "\r")
-    return line1, line2,
+    return line1, #line2,
 
 simulation = animation.FuncAnimation(fig, animate, frames=N_time)
 #plt.show()
 
 writervideo = animation.PillowWriter(fps=1000)
 simulation.save('transport_into_slab.gif') #saveit!
+'''

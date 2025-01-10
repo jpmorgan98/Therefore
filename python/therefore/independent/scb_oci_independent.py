@@ -26,10 +26,6 @@ mu1 = -1 #-0.57735
 mu2 = 1 #0.57735
 [angles, weights] = np.polynomial.legendre.leggauss(N_angles)
 
-
-w1 = 1
-w2 = 1
-
 tol = 1e-6
 max_itter = 100000
 

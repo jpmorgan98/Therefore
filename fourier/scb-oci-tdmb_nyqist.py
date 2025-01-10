@@ -20,7 +20,7 @@ v = 5
 sigma = 1.0
 sigma_s = sigma*.5
 
-N_l = 10000
+N_l = 250
 lam = np.pi*np.linspace(0,2,N_l)
 
 i = complex(0,1)
@@ -141,8 +141,8 @@ def compute():
     plt.xlabel('Real') 
     plt.title(r"Eigenvalues of OCI-SCB-TDMB ($\Delta t =${}, $\delta =${}, $c=${})".format(dt, dx*sigma, sigma_s/sigma))
     plt.legend()
-    #plt.show()
-    plt.savefig("eigplots/c{}/mfp{}dt{}c{}.png".format(sigma_s/sigma, dx*sigma, dt, sigma_s/sigma))
+    plt.show()
+    #plt.savefig("eigplots/c{}/mfp{}dt{}c{}.png".format(sigma_s/sigma, dx*sigma, dt, sigma_s/sigma))
     plt.clf()
 
     #mags = np.abs(eig_vals)
@@ -205,11 +205,11 @@ def computeSI():
 
 if __name__ == '__main__':
 
-    sigma_s = 0.997*sigma
+    sigma_s = 0.9*sigma
     dt = .1
     dx = .25
 
-    #spec = compute()
+    spec = compute()
 
     #exit()
 
