@@ -4,6 +4,13 @@ from matplotlib import cm
 from matplotlib.ticker import LinearLocator
 import math
 
+N_lam = 50
+lam = np.pi*np.linspace(0,2,N_lam)
+
+
+lam_max = 10000
+lam_hat = np.linspace(.1,lam_max,N_lam)
+
 np.set_printoptions(edgeitems=30, linewidth=100000, 
     formatter=dict(float=lambda x: "%.3g" % x))
 
@@ -70,6 +77,31 @@ def EBuild(l):
         elif angles[a] < 0:
             A[a*4:(a+1)*4,a*4:(a+1)*4] = Eblockneg(a,l)
     return(A)
+
+
+
+def Eblockpos_hat(a,l):
+    return(np.array([[0,0,0,0],
+                     [angles[a]*np.exp(-i*lam_hat[l]*dx),0,0,0],
+                     [0,0,0,0],
+                     [0,0,angles[a]*np.exp(-i*lam_hat[l]*dx),0]],dtype=np.complex_)
+    )
+def Eblockneg_hat(a,l):
+    return(np.array([[0,-angles[a]*np.exp(i*lam_hat[l]*dx),0,0],
+                     [0,0,0,0],
+                     [0,0,0,-angles[a]*np.exp(i*lam_hat[l]*dx)],
+                     [0,0,0,0]],dtype=np.complex_)
+    )
+
+def EBuild_hat(l):
+    A = np.zeros((4*N_angle, 4*N_angle),dtype=np.complex_)
+    for a in range(N_angle):
+        if   angles[a] > 0:
+            A[a*4:(a+1)*4,a*4:(a+1)*4] = Eblockpos_hat(a,l)
+        elif angles[a] < 0:
+            A[a*4:(a+1)*4,a*4:(a+1)*4] = Eblockneg_hat(a,l)
+    return(A)
+
 
 
 
@@ -191,12 +223,12 @@ def computeSOA():
     RmSinv = np.linalg.inv(R-S)
 
     for l in range(N_l):
-        E = EBuild(l)
+        E =  EBuild_hat(l)
         T = np.matmul(RmSinv, E)
 
         G = GBuild()
 
-        SOA = np.linalg.inv(G)
+        SOA = np.linalg.inv(G-E)
         Td = np.add (T,   np.matmul( np.matmul( SOA, E ), (T-np.identity(4*N_angle))) )
         eig_val, stand_eig_mat = np.linalg.eig(Td)
 
@@ -207,6 +239,8 @@ def computeSOA():
     spec_rad_abs = np.abs(spec_rad_complex)
 
     return(np.max(np.abs(spec_rad_complex)))
+
+
 
 def computeSI():
     spec_rad = np.zeros(N_l)
@@ -297,8 +331,8 @@ if __name__ == '__main__':
             dx = mfp_range[y]/sigma
             sigma_s = sigma*c_range[u]
             spec_rad[y,u] = compute()
-            #spec_rad_tsa[y,u] = computeTSA()
-            #spec_rad_soa[y,u] = computeSOA()
+            spec_rad_tsa[y,u] = computeTSA()
+            spec_rad_soa[y,u] = computeSOA()
             spec_rad_si[y,u] = computeSI()
 
             itter += 1
@@ -309,20 +343,20 @@ if __name__ == '__main__':
 
     c, mfp = np.meshgrid(c_range, mfp_range)
 
-    fig, (ax1, ax2, ax3) = plt.subplots(ncols=2)
+    fig, (ax1, ax2, ax3) = plt.subplots(ncols=3)
 
     surf = ax1.contourf(mfp, c, spec_rad, levels=100, vmin=0, vmax=1, cmap=cm.viridis, antialiased=False)
     fig.colorbar(surf)
     
-    surf2 = ax2.contourf(mfp, c, spec_rad_si, levels=100, vmin=0, vmax=1, cmap=cm.viridis, antialiased=False)
+    surf2 = ax2.contourf(mfp, c, spec_rad_tsa, levels=100, vmin=0, vmax=1, cmap=cm.viridis, antialiased=False)
     fig.colorbar(surf2)
     
-    #surf3 = ax3.contourf(mfp, c, spec_rad_soa, levels=100, cmap=cm.viridis, antialiased=False)
-    #fig.colorbar(surf3)
+    surf3 = ax3.contourf(mfp, c, spec_rad_soa, levels=100, cmap=cm.viridis, vmin=0, vmax=1, antialiased=False)
+    fig.colorbar(surf3)
 
     ax1.set_xscale('log')
     ax2.set_xscale('log')
-    #ax3.set_xscale('log')
+    ax3.set_xscale('log')
 
     ax1.set_xlabel(r"$\delta$")
     ax1.set_ylabel(r"$c$")
@@ -330,11 +364,11 @@ if __name__ == '__main__':
     ax2.set_xlabel(r"$\delta$")
 
 
-    #ax1.text(3e0, .1, 'OCI', color='w', style='italic',)# bbox={'facecolor': color_oci, 'alpha': 0.5, 'pad': 5})
+    ax1.text(3e0, .1, 'OCI', color='w', style='italic',)# bbox={'facecolor': color_oci, 'alpha': 0.5, 'pad': 5})
     
-    #ax2.text(3e0, .1, 'TSA', color='w', style='italic',)# bbox={'facecolor': color_si, 'alpha': 0.5, 'pad': 5})
+    ax2.text(3e0, .1, 'TSA', color='w', style='italic',)# bbox={'facecolor': color_si, 'alpha': 0.5, 'pad': 5})
 
-    #ax3.text(1e0, .1, r'$μ_m \frac{dψ}{dx}=0$', color='w', style='italic',)# bbox={'facecolor': color_si, 'alpha': 0.5, 'pad': 5})
+    ax3.text(1e0, .1, 'SOSA', color='w', style='italic',)# bbox={'facecolor': color_si, 'alpha': 0.5, 'pad': 5})
 
     plt.gcf().set_size_inches(6.5, 3)
 

@@ -20,7 +20,7 @@ v = 5
 sigma = 1.0
 sigma_s = sigma*.5
 
-N_l = 250
+N_l = 500
 lam = np.pi*np.linspace(0,2,N_l)
 
 i = complex(0,1)
@@ -136,12 +136,14 @@ def compute():
     print(max_eigval)
 
     plt.plot(eig_vals.real, eig_vals.imag, 'k.') 
-    plt.plot(max_eigval.real, max_eigval.imag, 'rX', markersize=15, label=r'$\rho$ ({})'.format(np.abs(max_eigval)))
+    plt.plot(max_eigval.real, max_eigval.imag, 'rX', markersize=10, label=r'$\rho$')
     plt.ylabel('Imaginary') 
     plt.xlabel('Real') 
-    plt.title(r"Eigenvalues of OCI-SCB-TDMB ($\Delta t =${}, $\delta =${}, $c=${})".format(dt, dx*sigma, sigma_s/sigma))
+    #plt.title(r"Eigenvalues of OCI-SCB-TDMB ($\Delta t =${}, $\delta =${}, $c=${})".format(dt, dx*sigma, sigma_s/sigma))
+    plt.grid()
     plt.legend()
-    plt.show()
+    #plt.show()
+    plt.savefig("eig_plot.pdf")
     #plt.savefig("eigplots/c{}/mfp{}dt{}c{}.png".format(sigma_s/sigma, dx*sigma, dt, sigma_s/sigma))
     plt.clf()
 
@@ -211,7 +213,7 @@ if __name__ == '__main__':
 
     spec = compute()
 
-    #exit()
+    exit()
 
     dt_range = np.array([100, 10, 1, 0.1])
     mfp = np.array([0.01, 1.0, 10])
