@@ -1,0 +1,14 @@
+{
+  "backend": "cpu_lapack",
+  "nx": 48,
+  "ny": 32,
+  "groups": 2,
+  "num_dirs": 16,
+  "cell_block_size": 256,
+  "total_unknowns": 393216,
+  "angular_flux_csv": "angular_flux_history.csv",
+  "scalar_flux_csv": "scalar_flux_history.csv",
+  "time_history": [
+    {"step": 0, "time": 1, "iterations": 80, "final_error": 0}
+  ]
+}
