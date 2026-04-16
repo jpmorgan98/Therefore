@@ -25,7 +25,7 @@ int main() {
     problem.nx = int(48);
     problem.ny = int(32);
     problem.groups = 2;
-    problem.max_iters = 10000;
+    problem.max_iters = 1000;
     problem.convergence_tol = 1.0e-10;
     problem.initialize_from_previous = true;
     problem.reuse_factorization = true;

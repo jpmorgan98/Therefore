@@ -8,7 +8,7 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 import numpy as np
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-INPUT_CSV = SCRIPT_DIR / "scalar_flux_history.csv"
+INPUT_CSV = SCRIPT_DIR / "inf_medium_1g_equilibrium_scalar_flux.csv"
 OUTPUT_GIF = SCRIPT_DIR / "flux_evolution.gif"
 PLOT_GROUP = 0
 FPS = 5

@@ -22,10 +22,12 @@ int main() {
     const std::string backend_name = use_rocm ? "rocm" : (use_openmp ? "omp_lapack" : "cpu_lapack");
 
     Problem2D problem;
-    problem.nx = 24;
-    problem.ny = 16;
+    problem.nx = 48;
+    problem.ny = 32;
+    problem.Lx = 1.0;
+    problem.Ly = 1.0;
     problem.groups = 2;
-    problem.max_iters = 250;
+    problem.max_iters = 2500;
     problem.convergence_tol = 1.0e-10;
     problem.initialize_from_previous = true;
     problem.reuse_factorization = true;
@@ -38,35 +40,35 @@ int main() {
             Cell2D& cell = cells[c];
             cell.x_left = static_cast<double>(i);
             cell.y_bottom = static_cast<double>(j);
-            cell.dx = 1.0;
-            cell.dy = 1.0;
+            cell.dx = problem.Lx/problem.nx;
+            cell.dy = problem.Ly/problem.ny;
             cell.dt = 0.10;
             cell.velocity = {1.0, 0.5};
 
-            if (i < problem.nx / 2) {
-                cell.sigma_t = {1.1, 0.7};
-                cell.sigma_s = {
-                    0.45, 0.08,
-                    0.12, 0.30
-                };
-            } else {
-                cell.sigma_t = {1.8, 1.1};
-                cell.sigma_s = {
-                    0.20, 0.03,
-                    0.08, 0.18
-                };
-            }
+            // if (i < problem.nx / 2) {
+            //     cell.sigma_t = {1.1, 0.7};
+            //     cell.sigma_s = {
+            //         0.7, 0.0,
+            //         0.0, 0.7
+            //     };
+            // } else {
+            cell.sigma_t = {1, 1};
+            cell.sigma_s = {
+                0.99, 0.99,
+                0.0, 0.99
+            };
+            // }
 
             cell.source.assign(problem.cell_block_size(), 0.0);
-            const bool source_patch = (i >= 2 && i <= 5 && j >= 5 && j <= 10);
-            if (source_patch) {
-                for (int dir = 0; dir < problem.num_dirs(); ++dir) {
-                    for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) {
-                        cell.source[local_angle_group_offset(problem, 0, dir, dof)] = 1.0;
-                        cell.source[local_angle_group_offset(problem, 1, dir, dof)] = 0.15;
-                    }
-                }
-            }
+            // const bool source_patch = (i >= 2 && i <= 5 && j >= 5 && j <= 10);
+            // if (source_patch) {
+            //     for (int dir = 0; dir < problem.num_dirs(); ++dir) {
+            //         for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) {
+            //             cell.source[local_angle_group_offset(problem, 0, dir, dof)] = 1.0;
+            //             cell.source[local_angle_group_offset(problem, 1, dir, dof)] = 1.0;
+            //         }
+            //     }
+            // }
         }
     }
 
@@ -76,10 +78,10 @@ int main() {
         for (int dir = 0; dir < problem.num_dirs(); ++dir) {
             if (problem.directions[dir].mu > 0.0) {
                 const int off = face_offset_west_east(problem, j, 0, dir, 0);
-                problem.boundary.west[off + 0] = 0.25;
-                problem.boundary.west[off + 1] = 0.25;
-                problem.boundary.west[off + 2] = 0.25;
-                problem.boundary.west[off + 3] = 0.25;
+                problem.boundary.west[off + 0] = 1;
+                problem.boundary.west[off + 1] = 1;
+                problem.boundary.west[off + 2] = 1;
+                problem.boundary.west[off + 3] = 1;
             }
         }
     }
@@ -94,7 +96,7 @@ int main() {
             const int c = cell_id(i, j, problem.nx);
             const double x = cells[c].x_left + 0.5 * cells[c].dx;
             const double y = cells[c].y_bottom + 0.5 * cells[c].dy;
-            const double pulse = 0.2 * std::exp(-0.05 * ((x - 6.0) * (x - 6.0) + (y - 8.0) * (y - 8.0)));
+            const double pulse = 0; //0.2 * std::exp(-0.05 * ((x - 6.0) * (x - 6.0) + (y - 8.0) * (y - 8.0)));
             for (int dir = 0; dir < problem.num_dirs(); ++dir) {
                 for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) {
                     initial_condition[global_offset(problem, c, 0, dir, dof)] = pulse;

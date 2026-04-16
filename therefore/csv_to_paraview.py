@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-INPUT_CSV = SCRIPT_DIR / "scalar_flux_history.csv"
-OUTPUT_DIR = SCRIPT_DIR / "paraview_flux"
+INPUT_CSV = SCRIPT_DIR / "results/scalar_flux_history.csv"
+OUTPUT_DIR = SCRIPT_DIR / "results/paraview_flux"
 PVD_FILE = OUTPUT_DIR / "flux_series.pvd"
 VTK_BASENAME = "step"
 
