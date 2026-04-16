@@ -35,6 +35,41 @@ inline const double& cm(const std::vector<double>& a, int n, int row, int col) {
 }
 
 std::array<double, 16> x_stream_block(double ax, bool positive_x) {
+    if (positive_x) {
+        return {
+            +ax, 0.0, 0.0, 0.0,
+            -ax, +ax, 0.0, 0.0,
+            0.0, 0.0, +ax, 0.0,
+            0.0, 0.0, -ax, +ax
+        };
+    }
+    return {
+        +ax, -ax, 0.0, 0.0,
+        0.0, +ax, 0.0, 0.0,
+        0.0, 0.0, +ax, -ax,
+        0.0, 0.0, 0.0, +ax
+    };
+}
+
+std::array<double, 16> y_stream_block(double ay, bool positive_y) {
+    if (positive_y) {
+        return {
+            +ay, 0.0, 0.0, 0.0,
+            0.0, +ay, 0.0, 0.0,
+            -ay, 0.0, +ay, 0.0,
+            0.0, -ay, 0.0, +ay
+        };
+    }
+    return {
+        +ay, 0.0, -ay, 0.0,
+        0.0, +ay, 0.0, -ay,
+        0.0, 0.0, +ay, 0.0,
+        0.0, 0.0, 0.0, +ay
+    };
+}
+
+/*
+std::array<double, 16> x_stream_block(double ax, bool positive_x) {
     // Eq. (4) in README_2D.md.
     if (positive_x) {
         return {
@@ -71,6 +106,7 @@ std::array<double, 16> y_stream_block(double ay, bool positive_y) {
         0.0, +ay, 0.0, +ay
     };
 }
+*/
 
 void add_small_block(std::vector<double>& a, int n, int row0, int col0, const std::array<double, 16>& block) {
     for (int r = 0; r < 4; ++r) {
@@ -133,7 +169,8 @@ void assemble_scatter_coupling(std::vector<double>& cell_matrix, const SolverSta
                     continue;
                 }
                 for (int d_from = 0; d_from < problem.num_dirs(); ++d_from) {
-                    const double beta = -(volume / 8.0) * sigma_s * problem.directions[d_from].weight;
+                    const double beta = -(volume / 4.0) * sigma_s * problem.directions[d_from].weight;
+                    //std::cout << sigma_s << std::endl;
                     const int col0 = local_angle_group_offset(problem, g_from, d_from, 0);
                     for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) {
                         cm(cell_matrix, n, row0 + dof, col0 + dof) += beta;
@@ -379,9 +416,9 @@ void build_constant_rhs(SolverState2D& state) {
             for (int d = 0; d < p.num_dirs(); ++d) {
                 const int base = global_offset(p, cell, g, d, 0);
                 for (int corner = 0; corner < 4; ++corner) {
-                    state.rhs_const[base + corner] = (volume / 8.0) * c.source[local_angle_group_offset(p, g, d, corner)]
+                    state.rhs_const[base + corner] = (volume / 4.0) * c.source[local_angle_group_offset(p, g, d, corner)]
                                                    + tau_half * state.flux_previous[base + corner];
-                    state.rhs_const[base + 4 + corner] = (volume / 8.0) * c.source[local_angle_group_offset(p, g, d, 4 + corner)];
+                    state.rhs_const[base + 4 + corner] = (volume / 4.0) * c.source[local_angle_group_offset(p, g, d, 4 + corner)];
                 }
             }
         }
