@@ -60,6 +60,8 @@ struct Cell2D {
 struct Problem2D {
     int nx = 0;
     int ny = 0;
+    double Lx = 0;
+    double Ly = 0;
     int groups = 0;
     int max_iters = 200;
     double convergence_tol = 1.0e-10;

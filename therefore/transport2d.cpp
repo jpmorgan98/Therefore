@@ -4,6 +4,7 @@
 #include <array>
 #include <limits>
 #include <numeric>
+#include <iostream>
 
 extern "C" {
 void dgetrf_(const int* m, const int* n, double* a, const int* lda, int* ipiv, int* info);
@@ -43,11 +44,12 @@ std::array<double, 16> x_stream_block(double ax, bool positive_x) {
             0.0, 0.0, -ax, +ax
         };
     }
+    // mu < 0
     return {
-        -ax, -ax, 0.0, 0.0,
         +ax, -ax, 0.0, 0.0,
-        0.0, 0.0, -ax, -ax,
-        0.0, 0.0, +ax, -ax
+        +ax, +ax, 0.0, 0.0,
+        0.0, 0.0, +ax, -ax,
+        0.0, 0.0, +ax, +ax
     };
 }
 
@@ -61,11 +63,12 @@ std::array<double, 16> y_stream_block(double ay, bool positive_y) {
             0.0, -ay, 0.0, +ay
         };
     }
+    // eta < 0
     return {
-        -ay, 0.0, -ay, 0.0,
-        0.0, -ay, 0.0, -ay,
         +ay, 0.0, -ay, 0.0,
-        0.0, +ay, 0.0, -ay
+        0.0, +ay, 0.0, -ay,
+        +ay, 0.0, +ay, 0.0,
+        0.0, +ay, 0.0, +ay
     };
 }
 
@@ -512,19 +515,24 @@ IterationStats run_one_timestep_cpu(SolverState2D& state, CpuLUCache& cache, boo
 
         stats.final_error = relative_l2_error(state.flux_last, state.flux_current);
         stats.iterations = it + 1;
+        stats.spectral_radius = stats.final_error / stats.error_previous;
         state.flux_last.swap(state.flux_current);
 
         if (stats.final_error < p.convergence_tol) {
             break;
         }
 
-        stats.spectral_radius = stats.final_error / stats.error_previous;
+        std::cout << "Iteration " << it << " rho= " <<  stats.spectral_radius << std::endl;
+
         stats.iterate();
     }
 
     state.flux_previous = state.flux_last;
     return stats;
 }
+
+
+
 
 std::vector<Direction2D> make_tensor_product_quadrature_2d(const std::vector<double>& mu, const std::vector<double>& w) {
     require(mu.size() == w.size(), "mu and w must have the same size.");
