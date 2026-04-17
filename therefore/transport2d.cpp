@@ -1,4 +1,5 @@
 #include "transport2d.hpp"
+#include "output.hpp"
 
 #include <algorithm>
 #include <array>
@@ -568,6 +569,42 @@ IterationStats run_one_timestep_cpu(SolverState2D& state, CpuLUCache& cache, boo
     return stats;
 }
 
+IterationStats run_time_cpu(SolverState2D& state, CpuLUCache& cpu_cache, bool use_openmp){
+    OutputFiles2D outputs;
+    initialize_output_files(outputs);
+
+    const double dt = state.cells.empty() ? state.problem.time_step : state.cells.front().dt;
+    double time = 0.0;
+    std::vector<TimestepRecord2D> history;
+    history.reserve(state.problem.num_time_steps);
+    IterationStats last_stats{};
+
+    for (int step = 0; step < state.problem.num_time_steps; ++step) {
+        std::cout << " TIME STEP: " << step << std::endl;
+        build_constant_rhs(state);
+        last_stats = run_one_timestep_cpu(state, cpu_cache, use_openmp);
+        time += dt;
+        history.push_back(TimestepRecord2D{step, time, last_stats});
+
+        append_angular_flux_csv(outputs.angular_flux_csv, step, time, state.flux_previous);
+        append_scalar_flux_csv(outputs.scalar_flux_csv, step, time, state, state.flux_previous);
+
+        std::cout << "step " << step
+                  << "  time=" << time
+                  << "  iterations=" << last_stats.iterations
+                  << "  spectral radius=" << last_stats.spectral_radius
+                  << "  final_error=" << last_stats.final_error << '\n';
+    }
+
+    const std::string backend_name = use_openmp ? "omp_lapack" : "cpu_lapack";
+    write_summary_json(outputs.summary_json, state, history, backend_name, outputs);
+
+    std::cout << "\nWrote:\n"
+              << "  " << outputs.angular_flux_csv << '\n'
+              << "  " << outputs.scalar_flux_csv << '\n'
+              << "  " << outputs.summary_json << '\n';
+    return last_stats;
+}
 
 
 

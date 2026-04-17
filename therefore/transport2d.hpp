@@ -64,6 +64,8 @@ struct Problem2D {
     double Ly = 0;
     int groups = 0;
     int max_iters = 200;
+    int num_time_steps = 1;
+    double time_step = 0.1;
     double convergence_tol = 1.0e-10;
     bool initialize_from_previous = true;
     bool reuse_factorization = true;
@@ -75,6 +77,7 @@ struct Problem2D {
     int cell_block_size() const { return groups * num_dirs() * kDofsPerAngleGroup2D; }
     int cell_block_elems() const { return cell_block_size() * cell_block_size(); }
     int total_unknowns() const { return num_cells() * cell_block_size(); }
+    double total_time() const { return num_time_steps * time_step;}
 };
 
 struct IterationStats {
@@ -165,8 +168,23 @@ struct RocmLUCache {
     void* rocblas_handle = nullptr;
     double* d_lu = nullptr;
     double* d_rhs = nullptr;
+    double* d_flux_last = nullptr;
+    double* d_rhs_const = nullptr;
+    double* d_work = nullptr;
+    double* d_cell_dx = nullptr;
+    double* d_cell_dy = nullptr;
+    double* d_cell_dt = nullptr;
+    double* d_cell_velocity = nullptr;
+    double* d_cell_source = nullptr;
+    double* d_dir_mu = nullptr;
+    double* d_dir_eta = nullptr;
+    double* d_boundary_west = nullptr;
+    double* d_boundary_east = nullptr;
+    double* d_boundary_south = nullptr;
+    double* d_boundary_north = nullptr;
     int* d_pivots = nullptr;
     int* d_info = nullptr;
+    bool sweep_data_valid = false;
     bool valid = false;
 };
 
