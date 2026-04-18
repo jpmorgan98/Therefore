@@ -8,6 +8,8 @@
 #include <iomanip>
 #include <stdexcept>
 
+#include <iostream>
+
 namespace therefore2d {
 namespace {
 
@@ -302,7 +304,7 @@ std::vector<double> radiation_temperature_field(const TrtState2D& state) {
     const SolverState2D& s = state.transport;
     const Problem2D& p = s.problem;
     std::vector<double> values(p.num_cells(), state.config.temperature_floor);
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int cell = 0; cell < p.num_cells(); ++cell) {
         double Jsum = 0.0;
         for (int g = 0; g < p.groups; ++g) {
@@ -447,7 +449,6 @@ TrtTimestepStats2D run_one_timestep_trt_cpu(TrtState2D& state, CpuLUCache& cache
         cache.valid = false;
         build_constant_rhs(state.transport);
         rec.transport_stats = run_one_timestep_cpu(state.transport, cache, use_openmp);
-
         const std::vector<double> J = scalar_flux_groups(state);
         const std::vector<double> Tnext = update_temperatures(state, Tlag, J);
         rec.max_temperature_change = max_rel_change(Tlag, Tnext);

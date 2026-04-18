@@ -489,13 +489,20 @@ double relative_l2_error(const std::vector<double>& previous, const std::vector<
     return std::sqrt(numer / denom);
 }
 
-void factor_cells_cpu(const SolverState2D& state, CpuLUCache& cache) {
+void factor_cells_cpu(const SolverState2D& state, CpuLUCache& cache, bool use_openmp) {
     const Problem2D& p = state.problem;
     cache.lu = state.cell_matrices;
     cache.pivots.assign(p.num_cells() * p.cell_block_size(), 0);
 
     const int n = p.cell_block_size();
     const int lda = n;
+#ifndef _OPENMP
+    (void)use_openmp;
+#endif
+
+#ifdef _OPENMP
+    #pragma omp parallel for if(use_openmp)
+#endif
     for (int cell = 0; cell < p.num_cells(); ++cell) {
         int info = 0;
         double* a = cache.lu.data() + cell * p.cell_block_elems();
@@ -540,12 +547,13 @@ void solve_cells_cpu(const SolverState2D& state, const CpuLUCache& cache, std::v
 IterationStats run_one_timestep_cpu(SolverState2D& state, CpuLUCache& cache, bool use_openmp) {
     const Problem2D& p = state.problem;
     if (!cache.valid || !p.reuse_factorization) {
-        factor_cells_cpu(state, cache);
+        factor_cells_cpu(state, cache, use_openmp);
     }
 
     state.flux_last = p.initialize_from_previous ? state.flux_previous : std::vector<double>(p.total_unknowns(), 0.0);
 
     IterationStats stats{};
+
     for (int it = 0; it < p.max_iters; ++it) {
         state.flux_current = state.rhs_const;
         add_upwind_inflow_rhs(state.flux_current, state.flux_last, state);
