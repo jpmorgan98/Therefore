@@ -22,9 +22,19 @@ struct OutputFiles2D {
 
 double cell_centered_scalar_flux(const SolverState2D& state, const std::vector<double>& flux, int cell, int group);
 
+void initialize_scalar_flux_csv(const std::string& path);
+void initialize_cell_field_csv(const std::string& path,
+                               const std::string& value_name,
+                               bool include_material_name = false);
 void initialize_output_files(const OutputFiles2D& files);
 void append_angular_flux_csv(const std::string& path, int time_step, double time, const std::vector<double>& flux);
 void append_scalar_flux_csv(const std::string& path, int time_step, double time, const SolverState2D& state, const std::vector<double>& flux);
+void append_cell_field_csv(const std::string& path,
+                           int time_step,
+                           double time,
+                           const SolverState2D& state,
+                           const std::vector<double>& values,
+                           const std::vector<std::string>* material_names = nullptr);
 void write_summary_json(const std::string& path,
                         const SolverState2D& state,
                         const std::vector<TimestepRecord2D>& history,

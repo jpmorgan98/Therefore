@@ -30,6 +30,28 @@ double cell_centered_scalar_flux(const SolverState2D& state, const std::vector<d
     return (weight_sum != 0.0) ? (value / weight_sum) : 0.0;
 }
 
+void initialize_scalar_flux_csv(const std::string& path) {
+    std::ofstream out(path);
+    if (!out) {
+        throw std::runtime_error("Could not open scalar flux CSV for writing: " + path);
+    }
+    out << "time_step,time,cell,i,j,group,x_center,y_center,value\n";
+}
+
+void initialize_cell_field_csv(const std::string& path,
+                               const std::string& value_name,
+                               bool include_material_name) {
+    std::ofstream out(path);
+    if (!out) {
+        throw std::runtime_error("Could not open cell field CSV for writing: " + path);
+    }
+    out << "time_step,time,cell,i,j,x_center,y_center";
+    if (include_material_name) {
+        out << ",material";
+    }
+    out << ',' << value_name << '\n';
+}
+
 void initialize_output_files(const OutputFiles2D& files) {
     {
         std::ofstream out(files.angular_flux_csv);
@@ -38,13 +60,7 @@ void initialize_output_files(const OutputFiles2D& files) {
         }
         out << "time_step,time,index,value\n";
     }
-    {
-        std::ofstream out(files.scalar_flux_csv);
-        if (!out) {
-            throw std::runtime_error("Could not open scalar flux CSV for writing: " + files.scalar_flux_csv);
-        }
-        out << "time_step,time,cell,i,j,group,x_center,y_center,value\n";
-    }
+    initialize_scalar_flux_csv(files.scalar_flux_csv);
 }
 
 void append_angular_flux_csv(const std::string& path, int time_step, double time, const std::vector<double>& flux) {
@@ -75,6 +91,41 @@ void append_scalar_flux_csv(const std::string& path, int time_step, double time,
                 out << time_step << ',' << time << ',' << cell << ',' << i << ',' << j << ',' << g << ','
                     << x_center << ',' << y_center << ',' << cell_centered_scalar_flux(state, flux, cell, g) << '\n';
             }
+        }
+    }
+}
+
+void append_cell_field_csv(const std::string& path,
+                           int time_step,
+                           double time,
+                           const SolverState2D& state,
+                           const std::vector<double>& values,
+                           const std::vector<std::string>* material_names) {
+    const Problem2D& p = state.problem;
+    if (static_cast<int>(values.size()) != p.num_cells()) {
+        throw std::runtime_error("append_cell_field_csv expected one value per cell.");
+    }
+    if (material_names != nullptr && static_cast<int>(material_names->size()) != p.num_cells()) {
+        throw std::runtime_error("append_cell_field_csv material_names must match num_cells.");
+    }
+
+    std::ofstream out(path, std::ios::app);
+    if (!out) {
+        throw std::runtime_error("Could not append cell field CSV: " + path);
+    }
+    out << std::setprecision(16);
+    for (int j = 0; j < p.ny; ++j) {
+        for (int i = 0; i < p.nx; ++i) {
+            const int cell = cell_id(i, j, p.nx);
+            const Cell2D& c = state.cells[cell];
+            const double x_center = c.x_left + 0.5 * c.dx;
+            const double y_center = c.y_bottom + 0.5 * c.dy;
+            out << time_step << ',' << time << ',' << cell << ',' << i << ',' << j << ','
+                << x_center << ',' << y_center;
+            if (material_names != nullptr) {
+                out << ',' << (*material_names)[cell];
+            }
+            out << ',' << values[cell] << '\n';
         }
     }
 }
