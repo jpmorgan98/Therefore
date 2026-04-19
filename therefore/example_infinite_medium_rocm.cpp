@@ -8,21 +8,21 @@ namespace {
 
 using namespace therefore2d;
 
-constexpr int kNx = 500;
-constexpr int kNy = 100;
-constexpr int kSN = 8;
-constexpr int kNumTimeSteps = 50;
-constexpr int kWarmupSteps = 200;
-constexpr double kWarmupTol = 1.0e-13;
+// Problem parameters — larger mesh, lower Sn order, very high scattering ratio:
+// chosen to stress GPU batch-LU throughput.
+constexpr int    kNx           = 500;
+constexpr int    kNy           = 100;
+constexpr int    kSN           = 8;
+constexpr int    kNumTimeSteps = 50;
+constexpr int    kWarmupSteps  = 200;
+constexpr double kWarmupTol    = 1.0e-13;
 
-const double PI = 3.14159265359;
-
-constexpr double kLx = 1.0;
-constexpr double kLy = 1.0;
-constexpr double kDt = 0.1;
+constexpr double kLx       = 1.0;
+constexpr double kLy       = 1.0;
+constexpr double kDt       = 0.1;
 constexpr double kVelocity = 1.0;
-constexpr double kSigmaT = 1.0;
-constexpr double kSigmaS = 0.95;
+constexpr double kSigmaT   = 1.0;
+constexpr double kSigmaS   = 0.95;   // high scattering ratio
 constexpr double kSourceIso = 0.25;
 
 void fill_homogeneous_single_group_cells(Problem2D& problem, std::vector<Cell2D>& cells) {
@@ -34,14 +34,14 @@ void fill_homogeneous_single_group_cells(Problem2D& problem, std::vector<Cell2D>
             const int c = cell_id(i, j, problem.nx);
             Cell2D& cell = cells[c];
 
-            cell.dx = dx;
-            cell.dy = dy;
-            cell.x_left = i * dx;
+            cell.dx       = dx;
+            cell.dy       = dy;
+            cell.x_left   = i * dx;
             cell.y_bottom = j * dy;
-            cell.dt = kDt;
+            cell.dt       = kDt;
             cell.velocity = {kVelocity};
-            cell.sigma_t = {kSigmaT};
-            cell.sigma_s = {kSigmaS};
+            cell.sigma_t  = {kSigmaT};
+            cell.sigma_s  = {kSigmaS};
 
             cell.source.assign(problem.cell_block_size(), 0.0);
             for (int dir = 0; dir < problem.num_dirs(); ++dir) {
@@ -110,10 +110,11 @@ SolverState2D make_state() {
 
     SolverState2D state;
     state.problem = problem;
-    state.cells = cells;
+    state.cells   = cells;
     return state;
 }
 
+// Warm up the CPU solution to discrete equilibrium, then hand it to ROCm.
 std::vector<double> compute_discrete_equilibrium(bool use_openmp) {
     SolverState2D state = make_state();
     std::vector<double> initial(state.problem.total_unknowns(), 0.0);
@@ -174,9 +175,10 @@ int main(int argc, char** argv) {
 #endif
 
     TransportOutputFiles2D outputs;
-    outputs.output_dir = "results/example_infinite_medium_rocm";
-    outputs.series_name = "transport";
+    outputs.output_dir   = "results/example_infinite_medium_rocm";
+    outputs.series_name  = "transport";
     outputs.summary_json = "results/example_infinite_medium_rocm_summary.json";
+    outputs.save_flux    = true;
 
 #ifdef THEREFORE2D_ENABLE_ROCM
     if (use_rocm) {
@@ -189,7 +191,7 @@ int main(int argc, char** argv) {
     }
 
     const double sigma_a = kSigmaT - kSigmaS;
-    std::cout << "\nSingle-group homogeneous medium\n"
+    std::cout << "\nSingle-group homogeneous medium (ROCm variant)\n"
               << "  isotropic source = " << kSourceIso << '\n'
               << "  sigma_t = " << kSigmaT << '\n'
               << "  sigma_s = " << kSigmaS << '\n'

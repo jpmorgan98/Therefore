@@ -2,8 +2,6 @@
 #include "output.hpp"
 
 #include <filesystem>
-#include <fstream>
-#include <iomanip>
 #include <iostream>
 
 #ifdef THEREFORE2D_ENABLE_ROCM
@@ -374,22 +372,23 @@ void factor_cells_rocm(const SolverState2D& state, RocmLUCache& cache) {
 
     const std::size_t a_bytes = sizeof(double) * cache.stride_a * cache.batch_count;
     const std::size_t b_bytes = sizeof(double) * cache.stride_b * cache.batch_count;
-    const std::size_t p_bytes = sizeof(int) * cache.stride_p * cache.batch_count;
-    const std::size_t i_bytes = sizeof(int) * cache.batch_count;
+    const std::size_t p_bytes = sizeof(int)    * cache.stride_p * cache.batch_count;
+    const std::size_t i_bytes = sizeof(int)    * cache.batch_count;
 
     if (!cache.d_lu) {
-        hip_check(hipMalloc(&cache.d_lu, a_bytes), "hipMalloc failed for d_lu.");
-        hip_check(hipMalloc(&cache.d_rhs, b_bytes), "hipMalloc failed for d_rhs.");
+        hip_check(hipMalloc(&cache.d_lu,        a_bytes), "hipMalloc failed for d_lu.");
+        hip_check(hipMalloc(&cache.d_rhs,       b_bytes), "hipMalloc failed for d_rhs.");
         hip_check(hipMalloc(&cache.d_flux_last, b_bytes), "hipMalloc failed for d_flux_last.");
         hip_check(hipMalloc(&cache.d_rhs_const, b_bytes), "hipMalloc failed for d_rhs_const.");
-        hip_check(hipMalloc(&cache.d_work, b_bytes), "hipMalloc failed for d_work.");
-        hip_check(hipMalloc(&cache.d_pivots, p_bytes), "hipMalloc failed for d_pivots.");
-        hip_check(hipMalloc(&cache.d_info, i_bytes), "hipMalloc failed for d_info.");
+        hip_check(hipMalloc(&cache.d_work,      b_bytes), "hipMalloc failed for d_work.");
+        hip_check(hipMalloc(&cache.d_pivots,    p_bytes), "hipMalloc failed for d_pivots.");
+        hip_check(hipMalloc(&cache.d_info,      i_bytes), "hipMalloc failed for d_info.");
     }
 
     ensure_sweep_data_rocm(state, cache);
 
-    hip_check(hipMemcpy(cache.d_lu, state.cell_matrices.data(), a_bytes, hipMemcpyHostToDevice), "hipMemcpy failed for LU upload.");
+    hip_check(hipMemcpy(cache.d_lu, state.cell_matrices.data(), a_bytes, hipMemcpyHostToDevice),
+              "hipMemcpy failed for LU upload.");
 
     rocblas_check(
         rocsolver_dgetrf_strided_batched(
@@ -415,9 +414,11 @@ void solve_cells_rocm(const SolverState2D& state, RocmLUCache& cache, std::vecto
     }
 
     const std::size_t b_bytes = sizeof(double) * cache.stride_b * cache.batch_count;
-    hip_check(hipMemcpy(cache.d_rhs, rhs.data(), b_bytes, hipMemcpyHostToDevice), "hipMemcpy failed for RHS upload.");
+    hip_check(hipMemcpy(cache.d_rhs, rhs.data(), b_bytes, hipMemcpyHostToDevice),
+              "hipMemcpy failed for RHS upload.");
     solve_cells_rocm_device(state, cache, cache.d_rhs);
-    hip_check(hipMemcpy(rhs.data(), cache.d_rhs, b_bytes, hipMemcpyDeviceToHost), "hipMemcpy failed for RHS download.");
+    hip_check(hipMemcpy(rhs.data(), cache.d_rhs, b_bytes, hipMemcpyDeviceToHost),
+              "hipMemcpy failed for RHS download.");
 }
 
 IterationStats run_one_timestep_rocm(SolverState2D& state, RocmLUCache& cache) {
@@ -431,7 +432,10 @@ IterationStats run_one_timestep_rocm(SolverState2D& state, RocmLUCache& cache) {
               "hipMemcpy failed for previous-time solution upload.");
     build_constant_rhs_rocm_device(state, cache, cache.d_rhs_const, cache.d_rhs);
 
-    state.flux_last = p.initialize_from_previous ? state.flux_previous : std::vector<double>(p.total_unknowns(), 0.0);
+    state.flux_last = p.initialize_from_previous
+        ? state.flux_previous
+        : std::vector<double>(p.total_unknowns(), 0.0);
+
     if (p.initialize_from_previous) {
         hip_check(hipMemcpy(cache.d_flux_last, cache.d_rhs, b_bytes, hipMemcpyDeviceToDevice),
                   "hipMemcpy failed for initial iterate copy.");
@@ -450,43 +454,36 @@ IterationStats run_one_timestep_rocm(SolverState2D& state, RocmLUCache& cache) {
         add_upwind_inflow_rhs_rocm(state, cache, cache.d_rhs, cache.d_flux_last);
         solve_cells_rocm_device(state, cache, cache.d_rhs);
 
+        // Compute ||psi_new - psi_old|| / ||psi_old||
         hip_check(hipMemcpy(cache.d_work, cache.d_rhs, b_bytes, hipMemcpyDeviceToDevice),
                   "hipMemcpy failed for d_work copy.");
         rocblas_check(rocblas_daxpy(as_handle(cache.rocblas_handle),
                                     p.total_unknowns(),
                                     &alpha,
-                                    cache.d_flux_last,
-                                    1,
-                                    cache.d_work,
-                                    1),
+                                    cache.d_flux_last, 1,
+                                    cache.d_work,      1),
                       "rocblas_daxpy failed while forming the iteration difference.");
 
         double numer_norm = 0.0;
         double denom_norm = 0.0;
         rocblas_check(rocblas_dnrm2(as_handle(cache.rocblas_handle),
-                                    p.total_unknowns(),
-                                    cache.d_work,
-                                    1,
-                                    &numer_norm),
+                                    p.total_unknowns(), cache.d_work,      1, &numer_norm),
                       "rocblas_dnrm2 failed for the iteration difference norm.");
         rocblas_check(rocblas_dnrm2(as_handle(cache.rocblas_handle),
-                                    p.total_unknowns(),
-                                    cache.d_flux_last,
-                                    1,
-                                    &denom_norm),
+                                    p.total_unknowns(), cache.d_flux_last, 1, &denom_norm),
                       "rocblas_dnrm2 failed for the previous iterate norm.");
 
         stats.final_error = (denom_norm == 0.0) ? numer_norm : (numer_norm / denom_norm);
-        stats.iterations = it + 1;
-        if (stats.error_previous != 0.0) {
-            stats.spectral_radius = stats.final_error / stats.error_previous;
-        }
+        stats.iterations  = it + 1;
+        // Guard against NaN on the first iteration when error_previous == 0
+        stats.spectral_radius = (stats.error_previous != 0.0)
+            ? stats.final_error / stats.error_previous
+            : 0.0;
         std::swap(cache.d_flux_last, cache.d_rhs);
 
         if (stats.final_error < p.convergence_tol) {
             break;
         }
-
         stats.iterate();
     }
 
@@ -498,49 +495,9 @@ IterationStats run_one_timestep_rocm(SolverState2D& state, RocmLUCache& cache) {
 }
 
 std::vector<TimestepRecord2D> run_time_rocm(SolverState2D& state,
-                                           RocmLUCache& cache,
-                                           const TransportOutputFiles2D& outputs) {
-    auto write_transport_summary_json = [](const std::string& path,
-                                           const SolverState2D& state_ref,
-                                           const std::vector<TimestepRecord2D>& history,
-                                           const std::string& backend_name,
-                                           const std::string& pvd_path) {
-        const std::filesystem::path out_path(path);
-        if (out_path.has_parent_path()) {
-            std::filesystem::create_directories(out_path.parent_path());
-        }
-
-        std::ofstream out(path);
-        if (!out) {
-            throw std::runtime_error("Could not open summary JSON for writing: " + path);
-        }
-
-        out << std::setprecision(16);
-        out << "{\n";
-        out << "  \"backend\": \"" << backend_name << "\",\n";
-        out << "  \"nx\": " << state_ref.problem.nx << ",\n";
-        out << "  \"ny\": " << state_ref.problem.ny << ",\n";
-        out << "  \"groups\": " << state_ref.problem.groups << ",\n";
-        out << "  \"num_dirs\": " << state_ref.problem.num_dirs() << ",\n";
-        out << "  \"cell_block_size\": " << state_ref.problem.cell_block_size() << ",\n";
-        out << "  \"total_unknowns\": " << state_ref.problem.total_unknowns() << ",\n";
-        out << "  \"paraview_pvd\": \"" << pvd_path << "\",\n";
-        out << "  \"time_history\": [\n";
-        for (std::size_t k = 0; k < history.size(); ++k) {
-            const auto& rec = history[k];
-            out << "    {\"step\": " << rec.step
-                << ", \"time\": " << rec.time
-                << ", \"iterations\": " << rec.stats.iterations
-                << ", \"final_error\": " << rec.stats.final_error
-                << ", \"spectral_radius\": " << rec.stats.spectral_radius << "}";
-            if (k + 1 != history.size()) {
-                out << ',';
-            }
-            out << '\n';
-        }
-        out << "  ]\n";
-        out << "}\n";
-    };
+                                            RocmLUCache& cache,
+                                            const TransportOutputFiles2D& outputs) {
+    std::filesystem::create_directories(outputs.output_dir);
 
     ParaviewSeriesWriter2D writer(
         make_rectilinear_grid(state),
@@ -560,14 +517,16 @@ std::vector<TimestepRecord2D> run_time_rocm(SolverState2D& state,
         history.push_back(TimestepRecord2D{step, time, stats});
 
         std::vector<CellScalarField2D> fields;
-        append_fields(fields, make_angular_flux_group_dir_fields(state, state.flux_previous, "angular_flux"));
-        append_fields(fields, make_scalar_flux_group_fields(state, state.flux_previous, "scalar_flux_g"));
+        if (outputs.save_flux) {
+            append_fields(fields, make_angular_flux_group_dir_fields(state, state.flux_previous, "angular_flux"));
+            append_fields(fields, make_scalar_flux_group_fields(state, state.flux_previous, "scalar_flux_g"));
+        }
         writer.write_step(step, time, fields);
 
         std::cout << "step " << step
                   << "  time=" << time
                   << "  iterations=" << stats.iterations
-                  << "  spectral radius=" << stats.spectral_radius
+                  << "  spectral_radius=" << stats.spectral_radius
                   << "  final_error=" << stats.final_error << '\n';
     }
 
@@ -580,32 +539,32 @@ std::vector<TimestepRecord2D> run_time_rocm(SolverState2D& state,
 }
 
 void destroy_rocm_cache(RocmLUCache& cache) {
-    if (cache.d_lu) { hipFree(cache.d_lu); cache.d_lu = nullptr; }
-    if (cache.d_rhs) { hipFree(cache.d_rhs); cache.d_rhs = nullptr; }
-    if (cache.d_flux_last) { hipFree(cache.d_flux_last); cache.d_flux_last = nullptr; }
-    if (cache.d_rhs_const) { hipFree(cache.d_rhs_const); cache.d_rhs_const = nullptr; }
-    if (cache.d_work) { hipFree(cache.d_work); cache.d_work = nullptr; }
-    if (cache.d_cell_dx) { hipFree(cache.d_cell_dx); cache.d_cell_dx = nullptr; }
-    if (cache.d_cell_dy) { hipFree(cache.d_cell_dy); cache.d_cell_dy = nullptr; }
-    if (cache.d_cell_dt) { hipFree(cache.d_cell_dt); cache.d_cell_dt = nullptr; }
-    if (cache.d_cell_velocity) { hipFree(cache.d_cell_velocity); cache.d_cell_velocity = nullptr; }
-    if (cache.d_cell_source) { hipFree(cache.d_cell_source); cache.d_cell_source = nullptr; }
-    if (cache.d_dir_mu) { hipFree(cache.d_dir_mu); cache.d_dir_mu = nullptr; }
-    if (cache.d_dir_eta) { hipFree(cache.d_dir_eta); cache.d_dir_eta = nullptr; }
-    if (cache.d_boundary_west) { hipFree(cache.d_boundary_west); cache.d_boundary_west = nullptr; }
-    if (cache.d_boundary_east) { hipFree(cache.d_boundary_east); cache.d_boundary_east = nullptr; }
+    if (cache.d_lu)             { hipFree(cache.d_lu);             cache.d_lu             = nullptr; }
+    if (cache.d_rhs)            { hipFree(cache.d_rhs);            cache.d_rhs            = nullptr; }
+    if (cache.d_flux_last)      { hipFree(cache.d_flux_last);      cache.d_flux_last      = nullptr; }
+    if (cache.d_rhs_const)      { hipFree(cache.d_rhs_const);      cache.d_rhs_const      = nullptr; }
+    if (cache.d_work)           { hipFree(cache.d_work);           cache.d_work           = nullptr; }
+    if (cache.d_cell_dx)        { hipFree(cache.d_cell_dx);        cache.d_cell_dx        = nullptr; }
+    if (cache.d_cell_dy)        { hipFree(cache.d_cell_dy);        cache.d_cell_dy        = nullptr; }
+    if (cache.d_cell_dt)        { hipFree(cache.d_cell_dt);        cache.d_cell_dt        = nullptr; }
+    if (cache.d_cell_velocity)  { hipFree(cache.d_cell_velocity);  cache.d_cell_velocity  = nullptr; }
+    if (cache.d_cell_source)    { hipFree(cache.d_cell_source);    cache.d_cell_source    = nullptr; }
+    if (cache.d_dir_mu)         { hipFree(cache.d_dir_mu);         cache.d_dir_mu         = nullptr; }
+    if (cache.d_dir_eta)        { hipFree(cache.d_dir_eta);        cache.d_dir_eta        = nullptr; }
+    if (cache.d_boundary_west)  { hipFree(cache.d_boundary_west);  cache.d_boundary_west  = nullptr; }
+    if (cache.d_boundary_east)  { hipFree(cache.d_boundary_east);  cache.d_boundary_east  = nullptr; }
     if (cache.d_boundary_south) { hipFree(cache.d_boundary_south); cache.d_boundary_south = nullptr; }
     if (cache.d_boundary_north) { hipFree(cache.d_boundary_north); cache.d_boundary_north = nullptr; }
-    if (cache.d_pivots) { hipFree(cache.d_pivots); cache.d_pivots = nullptr; }
-    if (cache.d_info) { hipFree(cache.d_info); cache.d_info = nullptr; }
+    if (cache.d_pivots)         { hipFree(cache.d_pivots);         cache.d_pivots         = nullptr; }
+    if (cache.d_info)           { hipFree(cache.d_info);           cache.d_info           = nullptr; }
     if (cache.rocblas_handle) {
         rocblas_destroy_handle(as_handle(cache.rocblas_handle));
         cache.rocblas_handle = nullptr;
     }
+    cache.valid            = false;
     cache.sweep_data_valid = false;
-    cache.valid = false;
 }
 
 } // namespace therefore2d
 
-#endif
+#endif // THEREFORE2D_ENABLE_ROCM

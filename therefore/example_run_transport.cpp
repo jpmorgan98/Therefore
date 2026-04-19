@@ -18,56 +18,39 @@ int main() {
 #else
     const bool use_rocm = false;
 #endif
+
     Problem2D problem;
-    problem.nx = 48;
-    problem.ny = 32;
-    problem.Lx = 1.0;
-    problem.Ly = 1.0;
-    problem.groups = 2;
-    problem.max_iters = 2500;
+    problem.nx           = 48;
+    problem.ny           = 32;
+    problem.Lx           = 1.0;
+    problem.Ly           = 1.0;
+    problem.groups       = 2;
+    problem.max_iters    = 2500;
     problem.num_time_steps = num_time_steps;
-    problem.time_step = 0.10;
-    problem.convergence_tol = 1.0e-10;
+    problem.time_step    = 0.10;
+    problem.convergence_tol       = 1.0e-10;
     problem.initialize_from_previous = true;
-    problem.reuse_factorization = true;
+    problem.reuse_factorization      = true;
     problem.directions = make_level_symmetric_quadrature_2d(8);
+
+    const double dx = problem.Lx / problem.nx;
+    const double dy = problem.Ly / problem.ny;
 
     std::vector<Cell2D> cells(problem.num_cells());
     for (int j = 0; j < problem.ny; ++j) {
         for (int i = 0; i < problem.nx; ++i) {
-            const int c = cell_id(i, j, problem.nx);
+            const int c  = cell_id(i, j, problem.nx);
             Cell2D& cell = cells[c];
-            cell.x_left = static_cast<double>(i);
-            cell.y_bottom = static_cast<double>(j);
-            cell.dx = problem.Lx/problem.nx;
-            cell.dy = problem.Ly/problem.ny;
-            cell.dt = 0.10;
-            cell.velocity = {1.0, 0.5};
-
-            // if (i < problem.nx / 2) {
-            //     cell.sigma_t = {1.1, 0.7};
-            //     cell.sigma_s = {
-            //         0.7, 0.0,
-            //         0.0, 0.7
-            //     };
-            // } else {
-            cell.sigma_t = {1, 1};
-            cell.sigma_s = {
-                0.99, 0.99,
-                0.0, 0.99
-            };
-            // }
-
+            cell.x_left    = static_cast<double>(i) * dx;  // BUG FIX: was (double)i
+            cell.y_bottom  = static_cast<double>(j) * dy;
+            cell.dx        = dx;
+            cell.dy        = dy;
+            cell.dt        = 0.10;
+            cell.velocity  = {1.0, 0.5};
+            cell.sigma_t   = {1.0, 1.0};
+            cell.sigma_s   = {0.99, 0.99,
+                              0.0,  0.99};
             cell.source.assign(problem.cell_block_size(), 0.0);
-            // const bool source_patch = (i >= 2 && i <= 5 && j >= 5 && j <= 10);
-            // if (source_patch) {
-            //     for (int dir = 0; dir < problem.num_dirs(); ++dir) {
-            //         for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) {
-            //             cell.source[local_angle_group_offset(problem, 0, dir, dof)] = 1.0;
-            //             cell.source[local_angle_group_offset(problem, 1, dir, dof)] = 1.0;
-            //         }
-            //     }
-            // }
         }
     }
 
@@ -77,34 +60,17 @@ int main() {
         for (int dir = 0; dir < problem.num_dirs(); ++dir) {
             if (problem.directions[dir].mu > 0.0) {
                 const int off = face_offset_west_east(problem, j, 0, dir, 0);
-                problem.boundary.west[off + 0] = 1;
-                problem.boundary.west[off + 1] = 1;
-                problem.boundary.west[off + 2] = 1;
-                problem.boundary.west[off + 3] = 1;
+                for (int k = 0; k < 4; ++k)
+                    problem.boundary.west[off + k] = 1.0;
             }
         }
     }
 
     SolverState2D state;
     state.problem = problem;
-    state.cells = cells;
+    state.cells   = cells;
 
     std::vector<double> initial_condition(problem.total_unknowns(), 0.0);
-    for (int j = 0; j < problem.ny; ++j) {
-        for (int i = 0; i < problem.nx; ++i) {
-            const int c = cell_id(i, j, problem.nx);
-            const double x = cells[c].x_left + 0.5 * cells[c].dx;
-            const double y = cells[c].y_bottom + 0.5 * cells[c].dy;
-            const double pulse = 0; //0.2 * std::exp(-0.05 * ((x - 6.0) * (x - 6.0) + (y - 8.0) * (y - 8.0)));
-            for (int dir = 0; dir < problem.num_dirs(); ++dir) {
-                for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) {
-                    initial_condition[global_offset(problem, c, 0, dir, dof)] = pulse;
-                    initial_condition[global_offset(problem, c, 1, dir, dof)] = 0.5 * pulse;
-                }
-            }
-        }
-    }
-
     initialize_state(state, initial_condition);
     assemble_cell_matrices(state);
 
@@ -112,10 +78,12 @@ int main() {
 #ifdef THEREFORE2D_ENABLE_ROCM
     RocmLUCache rocm_cache;
 #endif
+
     TransportOutputFiles2D outputs;
-    outputs.output_dir = "results/example_run_transport";
-    outputs.series_name = "transport";
+    outputs.output_dir   = "results/example_run_transport";
+    outputs.series_name  = "transport";
     outputs.summary_json = "results/example_run_transport_summary.json";
+    outputs.save_flux    = true;
 
 #ifdef THEREFORE2D_ENABLE_ROCM
     if (use_rocm) {

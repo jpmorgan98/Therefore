@@ -8,54 +8,47 @@ namespace {
 
 using namespace therefore2d;
 
-constexpr int kNx = 100;
-constexpr int kNy = 500;
-constexpr int kSN = 12;
-constexpr int kNumTimeSteps = 50;
-constexpr int kWarmupSteps = 200;
-constexpr double kWarmupTol = 1.0e-13;
+constexpr int    kNx           = 50;
+constexpr int    kNy           = 50;
+constexpr int    kSN           = 12;
+constexpr int    kNumTimeSteps = 50;
+constexpr int    kWarmupSteps  = 200;
+constexpr double kWarmupTol    = 1.0e-13;
+constexpr double kLx           = 1.0;
+constexpr double kLy           = 1.0;
+constexpr double kDt           = 0.1;
+constexpr double kVelocity     = 1.0;
+constexpr double kSigmaT       = 1.0;
+constexpr double kSigmaS       = 0.7;
+constexpr double kSourceIso    = 0.25;
 
-const double PI = 3.14159265359;
-
-constexpr double kLx = 1.0;
-constexpr double kLy = 1.0;
-constexpr double kDt = 0.1;
-constexpr double kVelocity = 1.0;
-constexpr double kSigmaT = 1.0;
-constexpr double kSigmaS = 0.7;
-constexpr double kSourceIso = 0.25;
-
-void fill_homogeneous_single_group_cells(Problem2D& problem, std::vector<Cell2D>& cells) {
+void fill_homogeneous_single_group_cells(Problem2D& problem,
+                                         std::vector<Cell2D>& cells) {
     const double dx = problem.Lx / problem.nx;
     const double dy = problem.Ly / problem.ny;
-
     for (int j = 0; j < problem.ny; ++j) {
         for (int i = 0; i < problem.nx; ++i) {
-            const int c = cell_id(i, j, problem.nx);
-            Cell2D& cell = cells[c];
-
-            cell.dx = dx;
-            cell.dy = dy;
-            cell.x_left = i * dx;
-            cell.y_bottom = j * dy;
-            cell.dt = kDt;
-            cell.velocity = {kVelocity};
-            cell.sigma_t = {kSigmaT};
-            cell.sigma_s = {kSigmaS};
-
+            const int c    = cell_id(i, j, problem.nx);
+            Cell2D& cell   = cells[c];
+            cell.dx        = dx;
+            cell.dy        = dy;
+            cell.x_left    = i * dx;
+            cell.y_bottom  = j * dy;
+            cell.dt        = kDt;
+            cell.velocity  = {kVelocity};
+            cell.sigma_t   = {kSigmaT};
+            cell.sigma_s   = {kSigmaS};
             cell.source.assign(problem.cell_block_size(), 0.0);
-            for (int dir = 0; dir < problem.num_dirs(); ++dir) {
-                for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) {
+            for (int dir = 0; dir < problem.num_dirs(); ++dir)
+                for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof)
                     cell.source[local_angle_group_offset(problem, 0, dir, dof)] = kSourceIso;
-                }
-            }
         }
     }
 }
 
 void set_isotropic_inflow_boundaries(Problem2D& problem, double psi_in) {
-    problem.boundary.west.assign(problem.ny * problem.groups * problem.num_dirs() * 4, 0.0);
-    problem.boundary.east.assign(problem.ny * problem.groups * problem.num_dirs() * 4, 0.0);
+    problem.boundary.west.assign (problem.ny * problem.groups * problem.num_dirs() * 4, 0.0);
+    problem.boundary.east.assign (problem.ny * problem.groups * problem.num_dirs() * 4, 0.0);
     problem.boundary.south.assign(problem.nx * problem.groups * problem.num_dirs() * 4, 0.0);
     problem.boundary.north.assign(problem.nx * problem.groups * problem.num_dirs() * 4, 0.0);
 
@@ -71,7 +64,6 @@ void set_isotropic_inflow_boundaries(Problem2D& problem, double psi_in) {
             }
         }
     }
-
     for (int i = 0; i < problem.nx; ++i) {
         for (int dir = 0; dir < problem.num_dirs(); ++dir) {
             if (problem.directions[dir].eta > 0.0) {
@@ -88,17 +80,17 @@ void set_isotropic_inflow_boundaries(Problem2D& problem, double psi_in) {
 
 SolverState2D make_state() {
     Problem2D problem;
-    problem.nx = kNx;
-    problem.ny = kNy;
-    problem.Lx = kLx;
-    problem.Ly = kLy;
-    problem.groups = 1;
-    problem.max_iters = 500;
+    problem.nx          = kNx;
+    problem.ny          = kNy;
+    problem.Lx          = kLx;
+    problem.Ly          = kLy;
+    problem.groups      = 1;
+    problem.max_iters   = 500;
     problem.num_time_steps = kNumTimeSteps;
-    problem.time_step = kDt;
-    problem.convergence_tol = 1.0e-12;
+    problem.time_step      = kDt;
+    problem.convergence_tol       = 1.0e-12;
     problem.initialize_from_previous = true;
-    problem.reuse_factorization = true;
+    problem.reuse_factorization      = true;
     problem.directions = make_level_symmetric_quadrature_2d(kSN);
 
     const double sigma_a = kSigmaT - kSigmaS;
@@ -110,10 +102,12 @@ SolverState2D make_state() {
 
     SolverState2D state;
     state.problem = problem;
-    state.cells = cells;
+    state.cells   = cells;
     return state;
 }
 
+/// Drive the solver to discrete steady state so we can start the timed run
+/// from equilibrium.
 std::vector<double> compute_discrete_equilibrium(bool use_openmp) {
     SolverState2D state = make_state();
     std::vector<double> initial(state.problem.total_unknowns(), 0.0);
@@ -127,14 +121,13 @@ std::vector<double> compute_discrete_equilibrium(bool use_openmp) {
         run_one_timestep_cpu(state, cache, use_openmp);
         const double change = relative_l2_error(previous, state.flux_previous);
         if (change < kWarmupTol) {
-            std::cout << "Computed discrete equilibrium in " << (step + 1)
-                      << " warmup steps with change=" << change << '\n';
+            std::cout << "Discrete equilibrium in " << (step + 1)
+                      << " warmup steps (change=" << change << ")\n";
             return state.flux_previous;
         }
         previous = state.flux_previous;
     }
-
-    std::cout << "Warmup hit the limit; using the last state as the discrete equilibrium guess.\n";
+    std::cout << "Warmup limit reached; using last state as equilibrium guess.\n";
     return state.flux_previous;
 }
 
@@ -143,7 +136,8 @@ std::vector<double> compute_discrete_equilibrium(bool use_openmp) {
 int main(int argc, char** argv) {
     using namespace therefore2d;
 
-    const std::string init_mode = (argc > 1) ? std::string(argv[1]) : "equilibrium";
+    const std::string init_mode = "zero";
+    //const std::string init_mode = (argc > 1) ? std::string(argv[1]) : "equilibrium";
 #ifdef THEREFORE2D_EXAMPLE_USE_OPENMP
     const bool use_openmp = true;
 #else
@@ -174,9 +168,10 @@ int main(int argc, char** argv) {
 #endif
 
     TransportOutputFiles2D outputs;
-    outputs.output_dir = "results/example_infinite_medium";
-    outputs.series_name = "transport";
+    outputs.output_dir   = "results/example_infinite_medium";
+    outputs.series_name  = "transport";
     outputs.summary_json = "results/example_infinite_medium_summary.json";
+    outputs.save_flux    = true;  // neutron transport: write flux fields
 
 #ifdef THEREFORE2D_ENABLE_ROCM
     if (use_rocm) {
@@ -190,16 +185,12 @@ int main(int argc, char** argv) {
 
     const double sigma_a = kSigmaT - kSigmaS;
     std::cout << "\nSingle-group homogeneous medium\n"
-              << "  isotropic source = " << kSourceIso << '\n'
-              << "  sigma_t = " << kSigmaT << '\n'
-              << "  sigma_s = " << kSigmaS << '\n'
-              << "  sigma_a = " << sigma_a << '\n';
-    if (sigma_a > 0.0) {
-        std::cout << "  continuous infinite-medium scalar = " << (kSourceIso / sigma_a) << '\n';
-    }
-    std::cout << "  init_mode = " << init_mode << '\n'
-              << "Wrote:\n"
-              << "  " << outputs.output_dir + "/" + outputs.series_name + ".pvd" << '\n'
-              << "  " << outputs.summary_json << '\n';
+              << "  isotropic source  = " << kSourceIso << '\n'
+              << "  sigma_t           = " << kSigmaT    << '\n'
+              << "  sigma_s           = " << kSigmaS    << '\n'
+              << "  sigma_a           = " << sigma_a    << '\n';
+    if (sigma_a > 0.0)
+        std::cout << "  analytic phi_inf  = " << (kSourceIso / sigma_a) << '\n';
+    std::cout << "  init_mode         = " << init_mode << '\n';
     return 0;
 }
