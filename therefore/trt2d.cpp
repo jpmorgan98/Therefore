@@ -1,206 +1,162 @@
 #include "trt2d.hpp"
+#include "anderson.hpp"
 #include "output.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <filesystem>
-#include <fstream>
 #include <functional>
-#include <iomanip>
+#include <iostream>
 #include <stdexcept>
 
-#include <iostream>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace therefore2d {
 namespace {
 
+// ---------------------------------------------------------------------------
+// Physical constants (same values as in the header, kept here for brevity)
+// ---------------------------------------------------------------------------
+
 constexpr double kPi = 3.1415926535897932384626433832795;
-constexpr double kSpeedOfLight = 2.99792458e10;
-constexpr double kPlanckH = 6.62607015e-27;
-constexpr double kBoltzmann = 1.602176634e-9;
-constexpr double kPlanckPrefactor = 2.0 * kBoltzmann * kBoltzmann * kBoltzmann * kBoltzmann
-                                 / (kSpeedOfLight * kSpeedOfLight * kPlanckH * kPlanckH * kPlanckH);
-constexpr double kRadiationConstant = 8.0 * kPi * kPi * kPi * kPi * kPi
-                                   * kBoltzmann * kBoltzmann * kBoltzmann * kBoltzmann
-                                   / (15.0 * kSpeedOfLight * kSpeedOfLight * kSpeedOfLight
-                                      * kPlanckH * kPlanckH * kPlanckH);
 
-std::array<double, 8> nodes8() {
-    return {-0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498,
-             0.1834346424956498,  0.5255324099163290,  0.7966664774136267,  0.9602898564975363};
+// Planck function prefactor: 2 k^4 / (c^2 h^3)  [erg/(cm^2 s sr keV^4 / keV^3)]
+constexpr double kPlanckPrefactor =
+    2.0 * kTrtBoltzmann * kTrtBoltzmann * kTrtBoltzmann * kTrtBoltzmann
+    / (kTrtSpeedOfLight * kTrtSpeedOfLight
+       * kTrtPlanckH * kTrtPlanckH * kTrtPlanckH);
+
+// ---------------------------------------------------------------------------
+// Gauss-Legendre quadrature (8-point) for energy integration
+// ---------------------------------------------------------------------------
+
+std::array<double, 8> gauss8_nodes() {
+    return {-0.9602898564975363, -0.7966664774136267,
+            -0.5255324099163290, -0.1834346424956498,
+             0.1834346424956498,  0.5255324099163290,
+             0.7966664774136267,  0.9602898564975363};
 }
 
-std::array<double, 8> weights8() {
-    return {0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3626837833783620,
-            0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763};
+std::array<double, 8> gauss8_weights() {
+    return {0.1012285362903763, 0.2223810344533745,
+            0.3137066458778873, 0.3626837833783620,
+            0.3626837833783620, 0.3137066458778873,
+            0.2223810344533745, 0.1012285362903763};
 }
 
-double integrate_pieces(const std::vector<double>& cuts, const std::function<double(double)>& f) {
-    static const auto n = nodes8();
-    static const auto w = weights8();
+/// Integrate f over a piecewise-smooth interval by subdividing at the
+/// feature points given in `cuts` and applying 8-point Gauss-Legendre
+/// on each sub-interval.
+double integrate_pieces(const std::vector<double>& cuts,
+                        const std::function<double(double)>& f) {
+    static const auto n = gauss8_nodes();
+    static const auto w = gauss8_weights();
     double total = 0.0;
     for (std::size_t k = 1; k < cuts.size(); ++k) {
         const double a = cuts[k - 1];
         const double b = cuts[k];
-        if (!(b > a)) {
-            continue;
-        }
+        if (!(b > a)) continue;
         const double half = 0.5 * (b - a);
-        const double mid = 0.5 * (a + b);
-        for (int q = 0; q < 8; ++q) {
+        const double mid  = 0.5 * (a + b);
+        for (int q = 0; q < 8; ++q)
             total += half * w[q] * f(mid + half * n[q]);
-        }
     }
     return total;
 }
 
-std::vector<double> cuts_for_group(double elo, double ehi, const AnalyticOpacityParams& p) {
+/// Build a sorted list of integration sub-interval boundaries for group
+/// [elo, ehi] by inserting the opacity feature points (epsilon_min,
+/// epsilon_edge, and the Gaussian line centres).
+std::vector<double> cuts_for_group(double elo, double ehi,
+                                   const AnalyticOpacityParams& p) {
     std::vector<double> cuts{elo, ehi};
     auto push = [&](double x) {
-        if (x > elo && x < ehi) {
-            cuts.push_back(x);
-        }
+        if (x > elo && x < ehi) cuts.push_back(x);
     };
     push(p.epsilon_min);
     push(p.epsilon_edge);
     if (p.num_lines > 0 && p.delta_w > 0.0) {
         for (int l = 0; l < p.num_lines; ++l) {
-            const double center = p.epsilon_edge - (static_cast<double>(l) + 1.0) * p.delta_s;
+            const double center = p.epsilon_edge
+                                 - (static_cast<double>(l) + 1.0) * p.delta_s;
             push(center - 5.0 * p.delta_w);
             push(center);
             push(center + 5.0 * p.delta_w);
         }
     }
     std::sort(cuts.begin(), cuts.end());
-    cuts.erase(std::unique(cuts.begin(), cuts.end(), [](double a, double b) {
-        return std::abs(a - b) < 1.0e-13;
-    }), cuts.end());
+    cuts.erase(std::unique(cuts.begin(), cuts.end(),
+                           [](double a, double b){ return std::abs(a-b) < 1.0e-13; }),
+               cuts.end());
     return cuts;
 }
+
+// ---------------------------------------------------------------------------
+// Spectral functions (private implementation)
+// ---------------------------------------------------------------------------
 
 double B_epsilon(double epsilon, double temperature) {
     const double T = std::max(temperature, 1.0e-12);
     const double x = epsilon / T;
+    // For very large x, exp(x)→∞; numerator ε³/∞ = 0 gracefully.
+    // For very small x, exp(x)-1 underflows toward 0; guard to avoid /0.
+    if (x > 700.0) return 0.0;
     const double denom = std::exp(x) - 1.0;
-    if (denom <= 0.0) {
-        return 0.0;
-    }
+    if (denom <= 0.0) return 0.0;
     return kPlanckPrefactor * epsilon * epsilon * epsilon / denom;
 }
 
 double dB_epsilon_dT(double epsilon, double temperature) {
-    const double T = std::max(temperature, 1.0e-12);
-    const double x = epsilon / T;
+    const double T  = std::max(temperature, 1.0e-12);
+    const double x  = epsilon / T;
+    // For large x: dB/dT ≈ (ε/T)² * B → 0.  Guard BEFORE computing exp to
+    // avoid inf/inf² = NaN when exp overflows.
+    if (x > 700.0) return 0.0;
     const double ex = std::exp(x);
     const double denom = ex - 1.0;
-    if (denom <= 0.0) {
-        return 0.0;
-    }
-    return kPlanckPrefactor * epsilon * epsilon * epsilon * epsilon * ex / (T * T * denom * denom);
+    if (denom <= 0.0) return 0.0;
+    return kPlanckPrefactor * epsilon * epsilon * epsilon * epsilon
+           * ex / (T * T * denom * denom);
 }
 
-double sigma_epsilon(double epsilon,
-                     double temperature,
-                     double density,
+double sigma_epsilon(double epsilon, double temperature, double density,
                      const AnalyticOpacityParams& p) {
-    const double T = std::max(temperature, 1.0e-12);
+    const double T    = std::max(temperature, 1.0e-12);
     const double ehat = std::max(p.epsilon_min, epsilon);
-    const double base = p.C0 * density * density / (std::sqrt(T) * ehat * ehat * ehat)
-                      * (1.0 - std::exp(-ehat / T));
+    const double base = p.C0 * density * density
+                       / (std::sqrt(T) * ehat * ehat * ehat)
+                       * (1.0 - std::exp(-ehat / T));
 
     double feature = 1.0;
-    if (ehat >= p.epsilon_edge) {
-        feature += p.C1;
-    }
+    if (ehat >= p.epsilon_edge) feature += p.C1;
     if (p.num_lines > 0 && p.delta_w > 0.0) {
         for (int l = 0; l < p.num_lines; ++l) {
-            const double center = p.epsilon_edge - (static_cast<double>(l) + 1.0) * p.delta_s;
+            const double center = p.epsilon_edge
+                                 - (static_cast<double>(l) + 1.0) * p.delta_s;
             const double z = (ehat - center) / p.delta_w;
-            feature += p.C2 / static_cast<double>(p.num_lines - l) * std::exp(-0.5 * z * z);
+            feature += p.C2 / static_cast<double>(p.num_lines - l)
+                      * std::exp(-0.5 * z * z);
         }
     }
     return base * feature;
 }
 
-double group_B(double elo, double ehi, double temperature) {
-    const auto cuts = cuts_for_group(elo, ehi, AnalyticOpacityParams{});
-    return integrate_pieces(cuts, [temperature](double e) { return B_epsilon(e, temperature); });
-}
+// ---------------------------------------------------------------------------
+// Boundary condition helper
+// ---------------------------------------------------------------------------
 
-double group_dB_dT(double elo, double ehi, double temperature) {
-    const auto cuts = cuts_for_group(elo, ehi, AnalyticOpacityParams{});
-    return integrate_pieces(cuts, [temperature](double e) { return dB_epsilon_dT(e, temperature); });
-}
-
-double group_planck_opacity(double elo,
-                            double ehi,
-                            double temperature,
-                            double density,
-                            const AnalyticOpacityParams& p) {
-    const auto cuts = cuts_for_group(elo, ehi, p);
-    const double B = integrate_pieces(cuts, [temperature](double e) { return B_epsilon(e, temperature); });
-    if (B <= 0.0) {
-        return 0.0;
-    }
-    const double weighted = integrate_pieces(cuts, [temperature, density, &p](double e) {
-        return sigma_epsilon(e, temperature, density, p) * B_epsilon(e, temperature);
-    });
-    return weighted / B;
-}
-
-int material_id_figure24a(double x, double y) {
-    auto in = [](double v, double lo, double hi) { return v >= lo && v < hi; };
-    if (in(x, 0.0, 1.0) && in(y, 2.0, 3.0)) return 1;
-    if (in(x, 2.0, 3.0) && in(y, 2.0, 3.0)) return 1;
-    if (in(x, 0.0, 1.0) && in(y, 0.0, 1.0)) return 1;
-    if (in(x, 0.0, 1.0) && in(y, 1.0, 2.0)) return 3;
-    if (in(x, 1.0, 2.0) && in(y, 1.0, 2.0)) return 2;
-    return 0;
-}
-
-void assign_geometry(TrtState2D& state) {
-    Problem2D& p = state.transport.problem;
-    state.transport.cells.assign(p.num_cells(), Cell2D{});
-    state.trt_cells.assign(p.num_cells(), TrtCellState2D{});
-
-    const double dx = p.Lx / static_cast<double>(p.nx);
-    const double dy = p.Ly / static_cast<double>(p.ny);
-    for (int j = 0; j < p.ny; ++j) {
-        for (int i = 0; i < p.nx; ++i) {
-            const int cell = cell_id(i, j, p.nx);
-            const double xc = (static_cast<double>(i) + 0.5) * dx;
-            const double yc = (static_cast<double>(j) + 0.5) * dy;
-            const int mat = material_id_figure24a(xc, yc);
-
-            Cell2D& c = state.transport.cells[cell];
-            c.x_left = static_cast<double>(i) * dx;
-            c.y_bottom = static_cast<double>(j) * dy;
-            c.dx = dx;
-            c.dy = dy;
-            c.dt = state.config.dt;
-
-            state.trt_cells[cell].material_id = mat;
-            state.trt_cells[cell].temperature = state.materials[mat].initial_temperature;
-            state.trt_cells[cell].previous_temperature = state.materials[mat].initial_temperature;
-        }
-    }
-}
-
-std::vector<double> planck_groups(const std::vector<double>& edges, double temperature) {
-    std::vector<double> out(edges.size() - 1, 0.0);
-    for (std::size_t g = 0; g + 1 < edges.size(); ++g) {
-        out[g] = group_B(edges[g], edges[g + 1], temperature);
-    }
-    return out;
-}
-
-void set_boundaries(SolverState2D& state,
-                    const std::vector<double>& left_B,
-                    const std::vector<double>& cold_B) {
+/// Set all four boundaries: left = incoming Planck at hot T, all others =
+/// incoming Planck at cold T (vacuum = leave empty for those faces).
+/// The problem per Brunner (2023) Sec. 5.1: left = hot, top/right = cold,
+/// bottom = cold (reflecting in RZ; we use cold Planck for 2-D Cartesian).
+void set_trt_boundaries(SolverState2D& state,
+                        const std::vector<double>& left_B,
+                        const std::vector<double>& cold_B) {
     Problem2D& p = state.problem;
-    p.boundary.west.assign(p.ny * p.groups * p.num_dirs() * 4, 0.0);
-    p.boundary.east.assign(p.ny * p.groups * p.num_dirs() * 4, 0.0);
+    p.boundary.west.assign (p.ny * p.groups * p.num_dirs() * 4, 0.0);
+    p.boundary.east.assign (p.ny * p.groups * p.num_dirs() * 4, 0.0);
     p.boundary.south.assign(p.nx * p.groups * p.num_dirs() * 4, 0.0);
     p.boundary.north.assign(p.nx * p.groups * p.num_dirs() * 4, 0.0);
 
@@ -218,7 +174,6 @@ void set_boundaries(SolverState2D& state,
             }
         }
     }
-
     for (int i = 0; i < p.nx; ++i) {
         for (int g = 0; g < p.groups; ++g) {
             for (int d = 0; d < p.num_dirs(); ++d) {
@@ -235,108 +190,41 @@ void set_boundaries(SolverState2D& state,
     }
 }
 
-void fill_transport_coefficients(TrtState2D& state, const std::vector<double>& Tlag) {
-    SolverState2D& s = state.transport;
-    Problem2D& p = s.problem;
-
-    const std::vector<double> left_B = planck_groups(state.group_edges, state.config.hot_boundary_temperature);
-    const std::vector<double> cold_B = planck_groups(state.group_edges, state.config.cold_boundary_temperature);
-    set_boundaries(s, left_B, cold_B);
-
-    #pragma omp parallel for
-    for (int cell = 0; cell < p.num_cells(); ++cell) {
-        const MaterialModelTRT& mat = state.materials[state.trt_cells[cell].material_id];
-        const double T = std::max(Tlag[cell], state.config.temperature_floor);
-        Cell2D& c = s.cells[cell];
-
-        c.dt = state.config.dt;
-        c.velocity.assign(p.groups, kSpeedOfLight);
-        c.sigma_t.assign(p.groups, 0.0);
-        c.sigma_s.assign(p.groups * p.groups, 0.0);
-        c.source.assign(p.cell_block_size(), 0.0);
-
-        std::vector<double> sigma(p.groups, 0.0);
-        std::vector<double> B(p.groups, 0.0);
-        std::vector<double> dB(p.groups, 0.0);
-        double denom = mat.density * mat.cv / state.config.dt;
-
-        for (int g = 0; g < p.groups; ++g) {
-            sigma[g] = group_planck_opacity(state.group_edges[g], state.group_edges[g + 1], T, mat.density, mat.opacity);
-            B[g] = group_B(state.group_edges[g], state.group_edges[g + 1], T);
-            dB[g] = group_dB_dT(state.group_edges[g], state.group_edges[g + 1], T);
-            denom += 4.0 * kPi * sigma[g] * dB[g];
-        }
-
-        double sigma_B_sum = 0.0;
-        for (int g = 0; g < p.groups; ++g) sigma_B_sum += sigma[g] * B[g];
-
-        std::vector<double> alpha(p.groups, 0.0);
-        for (int g = 0; g < p.groups; ++g) {
-            alpha[g] = (denom > 0.0) ? (4.0 * kPi * sigma[g] * dB[g] / denom) : 0.0;
-            c.sigma_t[g] = sigma[g];
-        }
-
-        for (int g_to = 0; g_to < p.groups; ++g_to) {
-            for (int g_from = 0; g_from < p.groups; ++g_from) {
-                c.sigma_s[g_to * p.groups + g_from] = alpha[g_to] * sigma[g_from];
-            }
-        }
-
-        for (int d = 0; d < p.num_dirs(); ++d) {
-            for (int g = 0; g < p.groups; ++g) {
-                const double q = sigma[g] * B[g] - alpha[g] * sigma_B_sum;
-                const int off = local_angle_group_offset(p, g, d, 0);
-                for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) c.source[off + dof] = q;
-            }
-        }
-    }
+/// Compute Planck integrals for each group.
+std::vector<double> planck_groups_vec(const std::vector<double>& edges,
+                                      double temperature) {
+    std::vector<double> out(edges.size() - 1, 0.0);
+    for (std::size_t g = 0; g + 1 < edges.size(); ++g)
+        out[g] = planck_B_group(edges[g], edges[g + 1], temperature);
+    return out;
 }
 
-std::vector<double> scalar_flux_groups(const TrtState2D& state) {
+// ---------------------------------------------------------------------------
+// Group scalar flux helper
+// ---------------------------------------------------------------------------
+
+/// Returns a flat array of size num_cells * groups with the cell-centred
+/// scalar flux (angle-average = sum_d w_d * psi_d) for each (cell, group).
+std::vector<double> scalar_flux_by_group(const TrtState2D& state) {
     const SolverState2D& s = state.transport;
-    const Problem2D& p = s.problem;
+    const Problem2D&     p = s.problem;
     std::vector<double> flux(p.num_cells() * p.groups, 0.0);
-    for (int cell = 0; cell < p.num_cells(); ++cell) {
-        for (int g = 0; g < p.groups; ++g) {
-            flux[cell * p.groups + g] = cell_centered_scalar_flux(s, s.flux_previous, cell, g);
-        }
-    }
+    for (int cell = 0; cell < p.num_cells(); ++cell)
+        for (int g = 0; g < p.groups; ++g)
+            flux[cell * p.groups + g] =
+                cell_centered_scalar_flux(s, s.flux_previous, cell, g);
     return flux;
 }
-std::vector<double> radiation_temperature_field(const TrtState2D& state) {
-    const SolverState2D& s = state.transport;
-    const Problem2D& p = s.problem;
-    std::vector<double> values(p.num_cells(), state.config.temperature_floor);
-    #pragma omp parallel for
-    for (int cell = 0; cell < p.num_cells(); ++cell) {
-        double Jsum = 0.0;
-        for (int g = 0; g < p.groups; ++g) {
-            Jsum += cell_centered_scalar_flux(s, s.flux_previous, cell, g);
-        }
-        const double ur = 4.0 * kPi * Jsum / kSpeedOfLight;
-        values[cell] = std::max(state.config.temperature_floor, std::pow(std::max(0.0, ur / kRadiationConstant), 0.25));
-    }
-    return values;
-}
 
-std::vector<double> material_temperature_field(const TrtState2D& state) {
-    const Problem2D& p = state.transport.problem;
-    std::vector<double> values(p.num_cells(), state.config.temperature_floor);
-
-    for (int cell = 0; cell < p.num_cells(); ++cell) {
-        values[cell] = state.trt_cells[cell].temperature;
-    }
-    return values;
-}
-
-std::vector<std::string> material_name_field(const TrtState2D& state) {
-    const Problem2D& p = state.transport.problem;
-    std::vector<std::string> names(p.num_cells());
-    for (int cell = 0; cell < p.num_cells(); ++cell) {
-        names[cell] = state.materials[state.trt_cells[cell].material_id].name;
-    }
-    return names;
-}
+// ---------------------------------------------------------------------------
+// Temperature update (Newton linearisation of material energy equation)
+// ---------------------------------------------------------------------------
+// Discretised energy equation (backward Euler):
+//   rho*cv/dt * (T^{n+1} - T^n) = sum_g sigma_g * (phi_g - 4*pi*B_g)
+// Linearising around T_lag:
+//   (rho*cv/dt + sum_g sigma_g * 4*pi * dB_g/dT) * T^{n+1}
+//     = rho*cv/dt * T^n + sum_g sigma_g * (phi_g - B_g + (dB_g/dT)*T_lag)
+// References: Brunner (2023) Eq. (5), (29).
 
 std::vector<double> update_temperatures(const TrtState2D& state,
                                         const std::vector<double>& Tlag,
@@ -344,27 +232,30 @@ std::vector<double> update_temperatures(const TrtState2D& state,
     const Problem2D& p = state.transport.problem;
     std::vector<double> next(Tlag.size(), state.config.temperature_floor);
 
-    #pragma omp parallel for
     for (int cell = 0; cell < p.num_cells(); ++cell) {
         const MaterialModelTRT& mat = state.materials[state.trt_cells[cell].material_id];
-        const double T = std::max(Tlag[cell], state.config.temperature_floor);
+        const double T    = std::max(Tlag[cell], state.config.temperature_floor);
         const double Told = state.trt_cells[cell].previous_temperature;
 
         double lhs = mat.density * mat.cv / state.config.dt;
         double rhs = lhs * Told;
+
         for (int g = 0; g < p.groups; ++g) {
-            const double sigma = group_planck_opacity(state.group_edges[g], state.group_edges[g + 1], T, mat.density, mat.opacity);
-            const double B = group_B(state.group_edges[g], state.group_edges[g + 1], T);
-            const double dB = group_dB_dT(state.group_edges[g], state.group_edges[g + 1], T);
+            const double sigma = planck_opacity_group(
+                state.group_edges[g], state.group_edges[g + 1], T, mat.density, mat.opacity);
+            const double B   = planck_B_group  (state.group_edges[g], state.group_edges[g + 1], T);
+            const double dB  = planck_dB_dT_group(state.group_edges[g], state.group_edges[g + 1], T);
+            // Note: scalar_flux stores angle-averaged psi; physics requires
+            // phi = 4*pi * <psi>.  The factor 4*pi is explicit here.
             lhs += 4.0 * kPi * sigma * dB;
             rhs += 4.0 * kPi * sigma * (scalar_flux[cell * p.groups + g] - B + dB * T);
         }
         next[cell] = std::max(state.config.temperature_floor, rhs / lhs);
     }
-
     return next;
 }
 
+/// Max relative change between two temperature iterates.
 double max_rel_change(const std::vector<double>& a, const std::vector<double>& b) {
     double err = 0.0;
     for (std::size_t i = 0; i < a.size(); ++i) {
@@ -376,94 +267,267 @@ double max_rel_change(const std::vector<double>& a, const std::vector<double>& b
 
 } // namespace
 
-std::vector<double> make_table5_group_edges() {
-    return {
-        1.0e-4, 3.0e-3, 1.095445115010333e-2, 4.0e-2, 5.0e-2,
-        7.825422900366437e-2, 1.224744871391589e-1, 1.916829312738817e-1,
-        3.0e-1, 6.708203932499368e-1, 1.5, 3.240370349203930, 7.0,
-        1.114619555925213e1, 1.774823934929885e1, 2.826076380281411e1, 4.5e1
-    };
+// ---------------------------------------------------------------------------
+// Public: group-integrated Planck functions and opacities
+// ---------------------------------------------------------------------------
+
+/// Build integration cuts that also include temperature-scale breakpoints so
+/// the Gauss quadrature resolves the Planck peak (at ~2.82*T) regardless of
+/// how wide the group is relative to T.  Without these, a single 8-point
+/// Gauss interval over [1e-4, 45] keV places its smallest point at ~0.9 keV,
+/// completely missing the peak at 2.82e-3 keV when T = 1e-3 keV.
+static std::vector<double> thermal_cuts(double elo, double ehi,
+                                        double temperature,
+                                        const AnalyticOpacityParams& params) {
+    auto cuts = cuts_for_group(elo, ehi, params);
+    const double T = std::max(temperature, 1.0e-12);
+    // Add breakpoints bracketing the Planck peak (epsilon_peak = 2.82*T).
+    // Three decades of refinement around T ensures the peak is captured for
+    // any ratio of group width to temperature.
+    for (double scale : {0.1, 0.5, 1.0, 2.82, 5.0, 10.0, 30.0}) {
+        const double x = scale * T;
+        if (x > elo && x < ehi) cuts.push_back(x);
+    }
+    std::sort(cuts.begin(), cuts.end());
+    cuts.erase(std::unique(cuts.begin(), cuts.end(),
+                           [](double a, double b){ return std::abs(a-b) < 1.0e-13 * b; }),
+               cuts.end());
+    return cuts;
 }
 
-std::vector<MaterialModelTRT> make_trt_materials() {
-    return {
-        MaterialModelTRT{"foam", 0.2, 2.41213e14, 1.0e-3, {0.04, 0.3, 2.0, 4.0e2, 0.0, 0, 0.0, 0.0}},
-        MaterialModelTRT{"carbon", 2.0, 2.41213e14, 1.0e-3, {0.04, 1.5, 0.77, 1.2e3, 30.0, 1, 0.01, 1.2}},
-        MaterialModelTRT{"cold_iron", 6.0, 5.4273e14, 1.0e-3, {0.05, 7.0, 20.1, 1.2e3, 1.2e3, 5, 0.01, 0.2}},
-        MaterialModelTRT{"hot_iron", 8.0, 5.4273e14, 5.0e-1, {0.05, 7.0, 20.1, 1.2e3, 1.2e3, 5, 0.01, 0.2}}
-    };
+double planck_B_group(double elo, double ehi, double temperature) {
+    const auto cuts = thermal_cuts(elo, ehi, temperature, AnalyticOpacityParams{});
+    return integrate_pieces(cuts, [temperature](double e) {
+        return B_epsilon(e, temperature);
+    });
 }
 
-TrtState2D make_figure24a_lattice_problem(const TrtConfig2D& config) {
-    TrtState2D state;
-    state.config = config;
-    state.group_edges = make_table5_group_edges();
-    state.materials = make_trt_materials();
-
-    Problem2D& p = state.transport.problem;
-    p.nx = config.nx;
-    p.ny = config.ny;
-    p.Lx = config.Lx;
-    p.Ly = config.Ly;
-    p.groups = static_cast<int>(state.group_edges.size()) - 1;
-    p.max_iters = config.max_transport_iters;
-    p.num_time_steps = config.num_time_steps;
-    p.time_step = config.dt;
-    p.convergence_tol = config.transport_tol;
-    p.initialize_from_previous = true;
-    p.reuse_factorization = false;
-    p.directions = make_level_symmetric_quadrature_2d(config.sn_order);
-
-    assign_geometry(state);
-    return state;
+double planck_dB_dT_group(double elo, double ehi, double temperature) {
+    const auto cuts = thermal_cuts(elo, ehi, temperature, AnalyticOpacityParams{});
+    return integrate_pieces(cuts, [temperature](double e) {
+        return dB_epsilon_dT(e, temperature);
+    });
 }
+
+double planck_opacity_group(double elo, double ehi,
+                            double temperature, double density,
+                            const AnalyticOpacityParams& params) {
+    const auto cuts = thermal_cuts(elo, ehi, temperature, params);
+    const double B = integrate_pieces(cuts, [temperature](double e) {
+        return B_epsilon(e, temperature);
+    });
+    if (B <= 0.0) return 0.0;
+    const double weighted = integrate_pieces(cuts,
+        [temperature, density, &params](double e) {
+            return sigma_epsilon(e, temperature, density, params) * B_epsilon(e, temperature);
+        });
+    return weighted / B;
+}
+
+// ---------------------------------------------------------------------------
+// Public: fill_transport_coefficients
+// ---------------------------------------------------------------------------
+// Implements the linearised multigroup TRT transport coefficients
+// (Brunner 2023, Eqs. 28-30) for the current Picard iterate temperature Tlag.
+//
+// sigma_t[g]        = sigma_P,g(T_lag)
+// sigma_s[g_to, g_from] = alpha[g_to] * sigma_P,g_from(T_lag)
+// source[g,d,dof]   = sigma_P,g * B_g(T_lag)
+//                       - alpha[g] * sum_{g'} sigma_P,g' * B_g'(T_lag)
+//
+// where alpha[g] = 4*pi * sigma_P,g * (dB_g/dT)
+//                 / (rho*cv/dt  +  4*pi * sum_{g''} sigma_P,g'' * dB_g''/dT)
+
+void fill_transport_coefficients(TrtState2D& state,
+                                 const std::vector<double>& Tlag,
+                                 bool use_openmp) {
+    SolverState2D& s = state.transport;
+    Problem2D&     p = s.problem;
+
+    const std::vector<double> left_B =
+        planck_groups_vec(state.group_edges, state.config.hot_boundary_temperature);
+    const std::vector<double> cold_B =
+        planck_groups_vec(state.group_edges, state.config.cold_boundary_temperature);
+    set_trt_boundaries(s, left_B, cold_B);
+
+#ifndef _OPENMP
+    (void)use_openmp;
+#endif
+
+#ifdef _OPENMP
+    #pragma omp parallel for if(use_openmp)
+#endif
+    for (int cell = 0; cell < p.num_cells(); ++cell) {
+        const MaterialModelTRT& mat = state.materials[state.trt_cells[cell].material_id];
+        const double T = std::max(Tlag[cell], state.config.temperature_floor);
+        Cell2D& c      = s.cells[cell];
+
+        c.dt = state.config.dt;
+        c.velocity.assign(p.groups, kTrtSpeedOfLight);
+        c.sigma_t.assign(p.groups, 0.0);
+        c.sigma_s.assign(p.groups * p.groups, 0.0);
+        c.source.assign(p.cell_block_size(), 0.0);
+
+        std::vector<double> sigma(p.groups, 0.0);
+        std::vector<double> B    (p.groups, 0.0);
+        std::vector<double> dB   (p.groups, 0.0);
+
+        // Denominator for alpha: rho*cv/dt + 4*pi * sum_g sigma_g * dB_g/dT
+        double denom = mat.density * mat.cv / state.config.dt;
+        for (int g = 0; g < p.groups; ++g) {
+            sigma[g] = planck_opacity_group(state.group_edges[g], state.group_edges[g + 1],
+                                            T, mat.density, mat.opacity);
+            B    [g] = planck_B_group      (state.group_edges[g], state.group_edges[g + 1], T);
+            dB   [g] = planck_dB_dT_group  (state.group_edges[g], state.group_edges[g + 1], T);
+            denom += 4.0 * kPi * sigma[g] * dB[g];
+        }
+
+        // Weighted emission sum: sum_g sigma_g * B_g
+        double sigma_B_sum = 0.0;
+        for (int g = 0; g < p.groups; ++g) sigma_B_sum += sigma[g] * B[g];
+
+        // alpha[g] = 4*pi * sigma[g] * dB[g] / denom
+        std::vector<double> alpha(p.groups, 0.0);
+        for (int g = 0; g < p.groups; ++g) {
+            alpha[g]    = (denom > 0.0) ? (4.0 * kPi * sigma[g] * dB[g] / denom) : 0.0;
+            c.sigma_t[g] = sigma[g];
+        }
+
+        // Effective group-to-group scattering (Brunner Eq. 28)
+        for (int g_to = 0; g_to < p.groups; ++g_to)
+            for (int g_from = 0; g_from < p.groups; ++g_from)
+                c.sigma_s[g_to * p.groups + g_from] = alpha[g_to] * sigma[g_from];
+
+        // Net emission source per direction (isotropic → same for all d)
+        for (int d = 0; d < p.num_dirs(); ++d) {
+            for (int g = 0; g < p.groups; ++g) {
+                // Brunner Eq. (30), tau*psi^{n-1} term handled by build_constant_rhs
+                const double q = sigma[g] * B[g] - alpha[g] * sigma_B_sum;
+                const int off  = local_angle_group_offset(p, g, d, 0);
+                for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof)
+                    c.source[off + dof] = q;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Public: post-processing fields
+// ---------------------------------------------------------------------------
+
+std::vector<double> radiation_temperature_field(const TrtState2D& state) {
+    const SolverState2D& s = state.transport;
+    const Problem2D&     p = s.problem;
+    std::vector<double> values(p.num_cells(), state.config.temperature_floor);
+
+    for (int cell = 0; cell < p.num_cells(); ++cell) {
+        double Jsum = 0.0;
+        for (int g = 0; g < p.groups; ++g)
+            Jsum += cell_centered_scalar_flux(s, s.flux_previous, cell, g);
+        // phi = 4*pi * Jsum;  ur = phi / c = 4*pi * Jsum / c
+        const double ur = 4.0 * kPi * Jsum / kTrtSpeedOfLight;
+        values[cell] = std::max(state.config.temperature_floor,
+            std::pow(std::max(0.0, ur / kTrtRadiationConstant), 0.25));
+    }
+    return values;
+}
+
+std::vector<double> material_temperature_field(const TrtState2D& state) {
+    const Problem2D& p = state.transport.problem;
+    std::vector<double> values(p.num_cells(), state.config.temperature_floor);
+    for (int cell = 0; cell < p.num_cells(); ++cell)
+        values[cell] = state.trt_cells[cell].temperature;
+    return values;
+}
+
+// ---------------------------------------------------------------------------
+// Public: initialiser and time-stepping
+// ---------------------------------------------------------------------------
 
 void initialize_trt_state(TrtState2D& state) {
     const Problem2D& p = state.transport.problem;
-    std::vector<double> initial_T(state.trt_cells.size(), state.config.temperature_floor);
-    for (std::size_t i = 0; i < state.trt_cells.size(); ++i) initial_T[i] = state.trt_cells[i].temperature;
+
+    // Set up transport coefficients with the initial temperatures.
+    std::vector<double> initial_T(state.trt_cells.size());
+    for (std::size_t i = 0; i < state.trt_cells.size(); ++i)
+        initial_T[i] = state.trt_cells[i].temperature;
     fill_transport_coefficients(state, initial_T);
 
+    // Initial angular flux = B_g(T) at each cell (equilibrium).
     std::vector<double> initial_flux(p.total_unknowns(), 0.0);
     for (int cell = 0; cell < p.num_cells(); ++cell) {
         const double T = state.trt_cells[cell].temperature;
         for (int g = 0; g < p.groups; ++g) {
-            const double B = group_B(state.group_edges[g], state.group_edges[g + 1], T);
+            const double B = planck_B_group(state.group_edges[g],
+                                            state.group_edges[g + 1], T);
             for (int d = 0; d < p.num_dirs(); ++d) {
                 const int off = global_offset(p, cell, g, d, 0);
-                for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) initial_flux[off + dof] = B;
+                for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof)
+                    initial_flux[off + dof] = B;
             }
         }
     }
     initialize_state(state.transport, initial_flux);
 }
 
-TrtTimestepStats2D run_one_timestep_trt_cpu(TrtState2D& state, CpuLUCache& cache, bool use_openmp) {
-    std::vector<double> Tlag(state.trt_cells.size(), 0.0);
+TrtTimestepStats2D run_one_timestep_trt_cpu(TrtState2D& state,
+                                            CpuLUCache& cache,
+                                            bool use_openmp) {
+    // Save previous-step temperatures.
+    std::vector<double> Tlag(state.trt_cells.size());
     for (std::size_t cell = 0; cell < state.trt_cells.size(); ++cell) {
         state.trt_cells[cell].previous_temperature = state.trt_cells[cell].temperature;
         Tlag[cell] = state.trt_cells[cell].temperature;
     }
-    double max_change_last = 1.0;
 
     TrtTimestepStats2D rec;
+    double max_change_prev = 1.0;
+
+    // Anderson mixing accelerator — created fresh each timestep so history
+    // from one Picard loop does not pollute the next.  Memory for the history
+    // vectors is allocated lazily on the first apply() call.
+    FixedPointAccelerator acc(state.config.anderson_m,
+                              state.config.anderson_damping,
+                              state.config.anderson_regularization);
+
     for (int nl = 0; nl < state.config.max_nonlinear_iters; ++nl) {
-        fill_transport_coefficients(state, Tlag);
+        fill_transport_coefficients(state, Tlag, use_openmp);
         assemble_cell_matrices(state.transport);
-        cache.valid = false;
+        cache.valid = false;  // coefficients changed; must re-factor
         build_constant_rhs(state.transport);
         rec.transport_stats = run_one_timestep_cpu(state.transport, cache, use_openmp);
-        const std::vector<double> J = scalar_flux_groups(state);
-        const std::vector<double> Tnext = update_temperatures(state, Tlag, J);
+
+        const std::vector<double> J = scalar_flux_by_group(state);
+        std::vector<double> Tnext   = update_temperatures(state, Tlag, J);
+
+        // Convergence check on the RAW (pre-acceleration) residual so the
+        // criterion reflects true energy-equation error, not accelerated step size.
         rec.max_temperature_change = max_rel_change(Tlag, Tnext);
-        rec.nonlinear_iterations = nl + 1;
-        Tlag = Tnext;
-        std::cout << "NL Iteration " << nl << " e " << rec.max_temperature_change << " rho " << rec.max_temperature_change/max_change_last << std::endl;
-        max_change_last = rec.max_temperature_change;
+        rec.nonlinear_iterations   = nl + 1;
+
+        const double rho_nl = (max_change_prev > 0.0)
+                             ? (rec.max_temperature_change / max_change_prev)
+                             : 0.0;
+        std::cout << "  NL " << nl
+                  << "  dT=" << rec.max_temperature_change
+                  << "  rho=" << rho_nl;
+        if (state.config.use_anderson_acceleration)
+            std::cout << "  [Anderson k=" << acc.history_size() + 1 << "]";
+        std::cout << '\n';
+        max_change_prev = rec.max_temperature_change;
+
+        // Apply Anderson mixing to get the next iterate fed into the transport.
+        // Tnext is modified in place; the raw convergence residual was already
+        // recorded above so the tolerance check is unaffected.
+        if (state.config.use_anderson_acceleration)
+            acc.apply(Tlag, Tnext);
+
+        Tlag = std::move(Tnext);
         if (rec.max_temperature_change < state.config.nonlinear_tol) break;
     }
 
-    for (std::size_t cell = 0; cell < state.trt_cells.size(); ++cell) state.trt_cells[cell].temperature = Tlag[cell];
+    for (std::size_t cell = 0; cell < state.trt_cells.size(); ++cell)
+        state.trt_cells[cell].temperature = Tlag[cell];
     return rec;
 }
 
@@ -471,16 +535,19 @@ std::vector<TrtTimestepStats2D> run_time_trt_cpu(TrtState2D& state,
                                                  CpuLUCache& cache,
                                                  bool use_openmp,
                                                  const TrtOutputFiles2D& outputs) {
+    std::filesystem::create_directories(outputs.output_dir);
+
     ParaviewSeriesWriter2D writer(
         make_rectilinear_grid(state.transport),
-        ParaviewSeriesConfig2D{outputs.output_dir, outputs.series_name, outputs.write_pvd_every_step});
+        ParaviewSeriesConfig2D{outputs.output_dir, outputs.series_name,
+                               outputs.write_pvd_every_step});
 
     state.history.clear();
     state.history.reserve(state.config.num_time_steps);
 
     double time = 0.0;
     for (int step = 0; step < state.config.num_time_steps; ++step) {
-        std::cout << "TRT STEP " << step << '\n';
+        std::cout << "TRT step " << step << '\n';
         TrtTimestepStats2D stats = run_one_timestep_trt_cpu(state, cache, use_openmp);
         time += state.config.dt;
         stats.step = step;
@@ -488,55 +555,32 @@ std::vector<TrtTimestepStats2D> run_time_trt_cpu(TrtState2D& state,
         state.history.push_back(stats);
 
         std::vector<CellScalarField2D> fields;
-        append_fields(fields, make_angular_flux_group_dir_fields(state.transport, state.transport.flux_previous, "angular_intensity"));
-        append_fields(fields, make_scalar_flux_group_fields(state.transport, state.transport.flux_previous, "scalar_flux_g"));
-        fields.push_back(make_cell_scalar_field("radiation_temperature", radiation_temperature_field(state)));
-        fields.push_back(make_cell_scalar_field("material_temperature", material_temperature_field(state)));
+        // Always write temperature fields.
+        fields.push_back(make_cell_scalar_field("radiation_temperature",
+                                                radiation_temperature_field(state)));
+        fields.push_back(make_cell_scalar_field("material_temperature",
+                                                material_temperature_field(state)));
+        // Optionally write flux fields (large: one field per group per direction).
+        if (outputs.save_flux) {
+            append_fields(fields,
+                make_angular_flux_group_dir_fields(state.transport,
+                                                   state.transport.flux_previous,
+                                                   "angular_intensity"));
+            append_fields(fields,
+                make_scalar_flux_group_fields(state.transport,
+                                              state.transport.flux_previous,
+                                              "scalar_flux_g"));
+        }
         writer.write_step(step, time, fields);
 
         std::cout << "  time=" << time
-                  << "  nonlinear_iters=" << stats.nonlinear_iterations
-                  << "  max_dT_rel=" << stats.max_temperature_change
+                  << "  nl_iters=" << stats.nonlinear_iterations
+                  << "  max_dT=" << stats.max_temperature_change
                   << "  transport_iters=" << stats.transport_stats.iterations
-                  << "  transport_error=" << stats.transport_stats.final_error
-                  << '\n';
+                  << "  transport_err=" << stats.transport_stats.final_error << '\n';
     }
 
-    const std::filesystem::path out_path(outputs.summary_json);
-    if (out_path.has_parent_path()) {
-        std::filesystem::create_directories(out_path.parent_path());
-    }
-
-    const Problem2D& p = state.transport.problem;
-    std::ofstream summary(outputs.summary_json);
-    if (!summary) {
-        throw std::runtime_error("Could not open TRT summary JSON for writing: " + outputs.summary_json);
-    }
-    summary << std::setprecision(16);
-    summary << "{\n";
-    summary << "  \"nx\": " << p.nx << ",\n";
-    summary << "  \"ny\": " << p.ny << ",\n";
-    summary << "  \"groups\": " << p.groups << ",\n";
-    summary << "  \"num_dirs\": " << p.num_dirs() << ",\n";
-    summary << "  \"dt\": " << state.config.dt << ",\n";
-    summary << "  \"num_time_steps\": " << state.config.num_time_steps << ",\n";
-    summary << "  \"paraview_pvd\": \"" << writer.pvd_path() << "\",\n";
-    summary << "  \"history\": [\n";
-    for (std::size_t k = 0; k < state.history.size(); ++k) {
-        const auto& rec = state.history[k];
-        summary << "    {\"step\": " << rec.step
-                << ", \"time\": " << rec.time
-                << ", \"nonlinear_iterations\": " << rec.nonlinear_iterations
-                << ", \"max_temperature_change\": " << rec.max_temperature_change
-                << ", \"transport_iterations\": " << rec.transport_stats.iterations
-                << ", \"transport_final_error\": " << rec.transport_stats.final_error << "}";
-        if (k + 1 != state.history.size()) {
-            summary << ',';
-        }
-        summary << '\n';
-    }
-    summary << "  ]\n";
-    summary << "}\n";
+    write_trt_summary_json(outputs.summary_json, state, writer.pvd_path());
 
     std::cout << "Wrote:\n"
               << "  " << writer.pvd_path() << '\n'
