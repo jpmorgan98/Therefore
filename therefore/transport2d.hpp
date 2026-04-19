@@ -147,13 +147,42 @@ void add_upwind_inflow_rhs(std::vector<double>& rhs, const std::vector<double>& 
 
 double relative_l2_error(const std::vector<double>& previous, const std::vector<double>& current);
 
-void factor_cells_cpu(const SolverState2D& state, CpuLUCache& cache);
+struct TimestepRecord2D {
+    int step = 0;
+    double time = 0.0;
+    IterationStats stats;
+};
+
+struct TransportOutputFiles2D {
+    std::string output_dir = "results/transport";
+    std::string series_name = "transport";
+    std::string summary_json = "results/transport_run_summary.json";
+    bool write_pvd_every_step = true;
+};
+
+double cell_average_angular_flux(const SolverState2D& state,
+                                 const std::vector<double>& flux,
+                                 int cell,
+                                 int group,
+                                 int dir);
+double cell_centered_scalar_flux(const SolverState2D& state,
+                                 const std::vector<double>& flux,
+                                 int cell,
+                                 int group);
+
+void factor_cells_cpu(const SolverState2D& state, CpuLUCache& cache, bool use_openmp);
 void solve_cells_cpu(const SolverState2D& state, const CpuLUCache& cache, std::vector<double>& rhs, bool use_openmp);
 
 IterationStats run_one_timestep_cpu(
     SolverState2D& state,
     CpuLUCache& cache,
     bool use_openmp);
+
+std::vector<TimestepRecord2D> run_time_cpu(
+    SolverState2D& state,
+    CpuLUCache& cache,
+    bool use_openmp,
+    const TransportOutputFiles2D& outputs = TransportOutputFiles2D{});
 
 std::vector<Direction2D> make_tensor_product_quadrature_2d(const std::vector<double>& mu, const std::vector<double>& w);
 std::vector<Direction2D> make_level_symmetric_quadrature_2d(int sn_order);
@@ -192,6 +221,10 @@ void factor_cells_rocm(const SolverState2D& state, RocmLUCache& cache);
 void solve_cells_rocm(const SolverState2D& state, RocmLUCache& cache, std::vector<double>& rhs);
 void destroy_rocm_cache(RocmLUCache& cache);
 IterationStats run_one_timestep_rocm(SolverState2D& state, RocmLUCache& cache);
+std::vector<TimestepRecord2D> run_time_rocm(
+    SolverState2D& state,
+    RocmLUCache& cache,
+    const TransportOutputFiles2D& outputs = TransportOutputFiles2D{});
 #endif
 
 } // namespace therefore2d

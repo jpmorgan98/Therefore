@@ -1,4 +1,10 @@
 #include "transport2d.hpp"
+#include "output.hpp"
+
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 
 #ifdef THEREFORE2D_ENABLE_ROCM
 
@@ -489,6 +495,88 @@ IterationStats run_one_timestep_rocm(SolverState2D& state, RocmLUCache& cache) {
               "hipMemcpy failed for final timestep solution download.");
     state.flux_previous = state.flux_last;
     return stats;
+}
+
+std::vector<TimestepRecord2D> run_time_rocm(SolverState2D& state,
+                                           RocmLUCache& cache,
+                                           const TransportOutputFiles2D& outputs) {
+    auto write_transport_summary_json = [](const std::string& path,
+                                           const SolverState2D& state_ref,
+                                           const std::vector<TimestepRecord2D>& history,
+                                           const std::string& backend_name,
+                                           const std::string& pvd_path) {
+        const std::filesystem::path out_path(path);
+        if (out_path.has_parent_path()) {
+            std::filesystem::create_directories(out_path.parent_path());
+        }
+
+        std::ofstream out(path);
+        if (!out) {
+            throw std::runtime_error("Could not open summary JSON for writing: " + path);
+        }
+
+        out << std::setprecision(16);
+        out << "{\n";
+        out << "  \"backend\": \"" << backend_name << "\",\n";
+        out << "  \"nx\": " << state_ref.problem.nx << ",\n";
+        out << "  \"ny\": " << state_ref.problem.ny << ",\n";
+        out << "  \"groups\": " << state_ref.problem.groups << ",\n";
+        out << "  \"num_dirs\": " << state_ref.problem.num_dirs() << ",\n";
+        out << "  \"cell_block_size\": " << state_ref.problem.cell_block_size() << ",\n";
+        out << "  \"total_unknowns\": " << state_ref.problem.total_unknowns() << ",\n";
+        out << "  \"paraview_pvd\": \"" << pvd_path << "\",\n";
+        out << "  \"time_history\": [\n";
+        for (std::size_t k = 0; k < history.size(); ++k) {
+            const auto& rec = history[k];
+            out << "    {\"step\": " << rec.step
+                << ", \"time\": " << rec.time
+                << ", \"iterations\": " << rec.stats.iterations
+                << ", \"final_error\": " << rec.stats.final_error
+                << ", \"spectral_radius\": " << rec.stats.spectral_radius << "}";
+            if (k + 1 != history.size()) {
+                out << ',';
+            }
+            out << '\n';
+        }
+        out << "  ]\n";
+        out << "}\n";
+    };
+
+    ParaviewSeriesWriter2D writer(
+        make_rectilinear_grid(state),
+        ParaviewSeriesConfig2D{outputs.output_dir, outputs.series_name, outputs.write_pvd_every_step});
+
+    const double dt = (state.problem.time_step > 0.0)
+        ? state.problem.time_step
+        : (state.cells.empty() ? 0.0 : state.cells.front().dt);
+    double time = 0.0;
+    std::vector<TimestepRecord2D> history;
+    history.reserve(state.problem.num_time_steps);
+
+    for (int step = 0; step < state.problem.num_time_steps; ++step) {
+        std::cout << " TIME STEP: " << step << std::endl;
+        IterationStats stats = run_one_timestep_rocm(state, cache);
+        time += dt;
+        history.push_back(TimestepRecord2D{step, time, stats});
+
+        std::vector<CellScalarField2D> fields;
+        append_fields(fields, make_angular_flux_group_dir_fields(state, state.flux_previous, "angular_flux"));
+        append_fields(fields, make_scalar_flux_group_fields(state, state.flux_previous, "scalar_flux_g"));
+        writer.write_step(step, time, fields);
+
+        std::cout << "step " << step
+                  << "  time=" << time
+                  << "  iterations=" << stats.iterations
+                  << "  spectral radius=" << stats.spectral_radius
+                  << "  final_error=" << stats.final_error << '\n';
+    }
+
+    write_transport_summary_json(outputs.summary_json, state, history, "rocm", writer.pvd_path());
+
+    std::cout << "\nWrote:\n"
+              << "  " << writer.pvd_path() << '\n'
+              << "  " << outputs.summary_json << '\n';
+    return history;
 }
 
 void destroy_rocm_cache(RocmLUCache& cache) {

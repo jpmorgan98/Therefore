@@ -3,9 +3,12 @@
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <limits>
 #include <numeric>
-#include <iostream>
 
 extern "C" {
 void dgetrf_(const int* m, const int* n, double* a, const int* lda, int* ipiv, int* info);
@@ -19,6 +22,48 @@ void dgetrs_(const char* trans, const int* n, const int* nrhs, const double* a, 
 
 namespace therefore2d {
 namespace {
+
+void write_transport_summary_json(const std::string& path,
+                                  const SolverState2D& state,
+                                  const std::vector<TimestepRecord2D>& history,
+                                  const std::string& backend_name,
+                                  const std::string& pvd_path) {
+    const std::filesystem::path out_path(path);
+    if (out_path.has_parent_path()) {
+        std::filesystem::create_directories(out_path.parent_path());
+    }
+
+    std::ofstream out(path);
+    if (!out) {
+        throw std::runtime_error("Could not open summary JSON for writing: " + path);
+    }
+
+    out << std::setprecision(16);
+    out << "{\n";
+    out << "  \"backend\": \"" << backend_name << "\",\n";
+    out << "  \"nx\": " << state.problem.nx << ",\n";
+    out << "  \"ny\": " << state.problem.ny << ",\n";
+    out << "  \"groups\": " << state.problem.groups << ",\n";
+    out << "  \"num_dirs\": " << state.problem.num_dirs() << ",\n";
+    out << "  \"cell_block_size\": " << state.problem.cell_block_size() << ",\n";
+    out << "  \"total_unknowns\": " << state.problem.total_unknowns() << ",\n";
+    out << "  \"paraview_pvd\": \"" << pvd_path << "\",\n";
+    out << "  \"time_history\": [\n";
+    for (std::size_t k = 0; k < history.size(); ++k) {
+        const auto& rec = history[k];
+        out << "    {\"step\": " << rec.step
+            << ", \"time\": " << rec.time
+            << ", \"iterations\": " << rec.stats.iterations
+            << ", \"final_error\": " << rec.stats.final_error
+            << ", \"spectral_radius\": " << rec.stats.spectral_radius << "}";
+        if (k + 1 != history.size()) {
+            out << ',';
+        }
+        out << '\n';
+    }
+    out << "  ]\n";
+    out << "}\n";
+}
 
 // Spatial corner ordering used everywhere:
 // 0 = LL, 1 = LR, 2 = UL, 3 = UR.
@@ -343,6 +388,33 @@ void add_y_inflow_from_boundary(
 
 } // namespace
 
+double cell_average_angular_flux(const SolverState2D& state,
+                                 const std::vector<double>& flux,
+                                 int cell,
+                                 int group,
+                                 int dir) {
+    double sum = 0.0;
+    for (int dof = 0; dof < kDofsPerAngleGroup2D; ++dof) {
+        sum += flux[global_offset(state.problem, cell, group, dir, dof)];
+    }
+    return sum / static_cast<double>(kDofsPerAngleGroup2D);
+}
+
+double cell_centered_scalar_flux(const SolverState2D& state,
+                                 const std::vector<double>& flux,
+                                 int cell,
+                                 int group) {
+    const Problem2D& p = state.problem;
+    double value = 0.0;
+    double weight_sum = 0.0;
+    for (int dir = 0; dir < p.num_dirs(); ++dir) {
+        const double w = p.directions[dir].weight;
+        value += w * cell_average_angular_flux(state, flux, cell, group, dir);
+        weight_sum += w;
+    }
+    return (weight_sum != 0.0) ? (value / weight_sum) : 0.0;
+}
+
 void validate_problem(const SolverState2D& state) {
     const Problem2D& p = state.problem;
     require(p.nx > 0 && p.ny > 0, "Problem2D requires nx > 0 and ny > 0.");
@@ -577,42 +649,50 @@ IterationStats run_one_timestep_cpu(SolverState2D& state, CpuLUCache& cache, boo
     return stats;
 }
 
-IterationStats run_time_cpu(SolverState2D& state, CpuLUCache& cpu_cache, bool use_openmp){
-    OutputFiles2D outputs;
-    initialize_output_files(outputs);
+std::vector<TimestepRecord2D> run_time_cpu(SolverState2D& state,
+                                           CpuLUCache& cpu_cache,
+                                           bool use_openmp,
+                                           const TransportOutputFiles2D& outputs) {
+    ParaviewSeriesWriter2D writer(
+        make_rectilinear_grid(state),
+        ParaviewSeriesConfig2D{outputs.output_dir, outputs.series_name, outputs.write_pvd_every_step});
 
-    const double dt = state.cells.empty() ? state.problem.time_step : state.cells.front().dt;
+    const double dt = (state.problem.time_step > 0.0)
+        ? state.problem.time_step
+        : (state.cells.empty() ? 0.0 : state.cells.front().dt);
     double time = 0.0;
     std::vector<TimestepRecord2D> history;
     history.reserve(state.problem.num_time_steps);
-    IterationStats last_stats{};
 
     for (int step = 0; step < state.problem.num_time_steps; ++step) {
         std::cout << " TIME STEP: " << step << std::endl;
         build_constant_rhs(state);
-        last_stats = run_one_timestep_cpu(state, cpu_cache, use_openmp);
+        IterationStats stats = run_one_timestep_cpu(state, cpu_cache, use_openmp);
         time += dt;
-        history.push_back(TimestepRecord2D{step, time, last_stats});
+        history.push_back(TimestepRecord2D{step, time, stats});
 
-        append_angular_flux_csv(outputs.angular_flux_csv, step, time, state.flux_previous);
-        append_scalar_flux_csv(outputs.scalar_flux_csv, step, time, state, state.flux_previous);
+        std::vector<CellScalarField2D> fields;
+        append_fields(fields, make_angular_flux_group_dir_fields(state, state.flux_previous, "angular_flux"));
+        append_fields(fields, make_scalar_flux_group_fields(state, state.flux_previous, "scalar_flux_g"));
+        writer.write_step(step, time, fields);
 
         std::cout << "step " << step
                   << "  time=" << time
-                  << "  iterations=" << last_stats.iterations
-                  << "  spectral radius=" << last_stats.spectral_radius
-                  << "  final_error=" << last_stats.final_error << '\n';
+                  << "  iterations=" << stats.iterations
+                  << "  spectral radius=" << stats.spectral_radius
+                  << "  final_error=" << stats.final_error << '\n';
     }
 
     const std::string backend_name = use_openmp ? "omp_lapack" : "cpu_lapack";
-    write_summary_json(outputs.summary_json, state, history, backend_name, outputs);
+    write_transport_summary_json(outputs.summary_json, state, history, backend_name, writer.pvd_path());
 
     std::cout << "\nWrote:\n"
-              << "  " << outputs.angular_flux_csv << '\n'
-              << "  " << outputs.scalar_flux_csv << '\n'
+              << "  " << writer.pvd_path() << '\n'
               << "  " << outputs.summary_json << '\n';
-    return last_stats;
+    return history;
 }
+
+
 
 
 

@@ -1,8 +1,10 @@
 #include "trt2d.hpp"
+#include "output.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -241,6 +243,7 @@ void fill_transport_coefficients(TrtState2D& state, const std::vector<double>& T
     const std::vector<double> cold_B = planck_groups(state.group_edges, state.config.cold_boundary_temperature);
     set_boundaries(s, left_B, cold_B);
 
+    #pragma omp parallel for
     for (int cell = 0; cell < p.num_cells(); ++cell) {
         const MaterialModelTRT& mat = state.materials[state.trt_cells[cell].material_id];
         const double T = std::max(Tlag[cell], state.config.temperature_floor);
@@ -304,7 +307,7 @@ std::vector<double> radiation_temperature_field(const TrtState2D& state) {
     const SolverState2D& s = state.transport;
     const Problem2D& p = s.problem;
     std::vector<double> values(p.num_cells(), state.config.temperature_floor);
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int cell = 0; cell < p.num_cells(); ++cell) {
         double Jsum = 0.0;
         for (int g = 0; g < p.groups; ++g) {
@@ -441,6 +444,7 @@ TrtTimestepStats2D run_one_timestep_trt_cpu(TrtState2D& state, CpuLUCache& cache
         state.trt_cells[cell].previous_temperature = state.trt_cells[cell].temperature;
         Tlag[cell] = state.trt_cells[cell].temperature;
     }
+    double max_change_last = 1.0;
 
     TrtTimestepStats2D rec;
     for (int nl = 0; nl < state.config.max_nonlinear_iters; ++nl) {
@@ -454,6 +458,8 @@ TrtTimestepStats2D run_one_timestep_trt_cpu(TrtState2D& state, CpuLUCache& cache
         rec.max_temperature_change = max_rel_change(Tlag, Tnext);
         rec.nonlinear_iterations = nl + 1;
         Tlag = Tnext;
+        std::cout << "NL Iteration " << nl << " e " << rec.max_temperature_change << " rho " << rec.max_temperature_change/max_change_last << std::endl;
+        max_change_last = rec.max_temperature_change;
         if (rec.max_temperature_change < state.config.nonlinear_tol) break;
     }
 
@@ -461,30 +467,51 @@ TrtTimestepStats2D run_one_timestep_trt_cpu(TrtState2D& state, CpuLUCache& cache
     return rec;
 }
 
-void initialize_trt_output_files(const TrtOutputFiles2D& files) {
-    initialize_scalar_flux_csv(files.scalar_flux_csv);
-    initialize_cell_field_csv(files.radiation_temperature_csv, "radiation_temperature_keV", false);
-    initialize_cell_field_csv(files.material_temperature_csv, "material_temperature_keV", true);
-}
+std::vector<TrtTimestepStats2D> run_time_trt_cpu(TrtState2D& state,
+                                                 CpuLUCache& cache,
+                                                 bool use_openmp,
+                                                 const TrtOutputFiles2D& outputs) {
+    ParaviewSeriesWriter2D writer(
+        make_rectilinear_grid(state.transport),
+        ParaviewSeriesConfig2D{outputs.output_dir, outputs.series_name, outputs.write_pvd_every_step});
 
-void append_trt_timestep_outputs(const TrtState2D& state,
-                                 const TrtOutputFiles2D& files,
-                                 int time_step,
-                                 double time) {
-    append_scalar_flux_csv(files.scalar_flux_csv, time_step, time, state.transport, state.transport.flux_previous);
+    state.history.clear();
+    state.history.reserve(state.config.num_time_steps);
 
-    const std::vector<double> tr = radiation_temperature_field(state);
-    const std::vector<double> tm = material_temperature_field(state);
-    const std::vector<std::string> mat = material_name_field(state);
+    double time = 0.0;
+    for (int step = 0; step < state.config.num_time_steps; ++step) {
+        std::cout << "TRT STEP " << step << '\n';
+        TrtTimestepStats2D stats = run_one_timestep_trt_cpu(state, cache, use_openmp);
+        time += state.config.dt;
+        stats.step = step;
+        stats.time = time;
+        state.history.push_back(stats);
 
-    append_cell_field_csv(files.radiation_temperature_csv, time_step, time, state.transport, tr, nullptr);
-    append_cell_field_csv(files.material_temperature_csv, time_step, time, state.transport, tm, &mat);
-}
+        std::vector<CellScalarField2D> fields;
+        append_fields(fields, make_angular_flux_group_dir_fields(state.transport, state.transport.flux_previous, "angular_intensity"));
+        append_fields(fields, make_scalar_flux_group_fields(state.transport, state.transport.flux_previous, "scalar_flux_g"));
+        fields.push_back(make_cell_scalar_field("radiation_temperature", radiation_temperature_field(state)));
+        fields.push_back(make_cell_scalar_field("material_temperature", material_temperature_field(state)));
+        writer.write_step(step, time, fields);
 
-void write_trt_outputs(const TrtState2D& state, const TrtOutputFiles2D& files) {
+        std::cout << "  time=" << time
+                  << "  nonlinear_iters=" << stats.nonlinear_iterations
+                  << "  max_dT_rel=" << stats.max_temperature_change
+                  << "  transport_iters=" << stats.transport_stats.iterations
+                  << "  transport_error=" << stats.transport_stats.final_error
+                  << '\n';
+    }
+
+    const std::filesystem::path out_path(outputs.summary_json);
+    if (out_path.has_parent_path()) {
+        std::filesystem::create_directories(out_path.parent_path());
+    }
+
     const Problem2D& p = state.transport.problem;
-    std::ofstream summary(files.summary_json);
-    if (!summary) throw std::runtime_error("Could not open TRT summary JSON for writing: " + files.summary_json);
+    std::ofstream summary(outputs.summary_json);
+    if (!summary) {
+        throw std::runtime_error("Could not open TRT summary JSON for writing: " + outputs.summary_json);
+    }
     summary << std::setprecision(16);
     summary << "{\n";
     summary << "  \"nx\": " << p.nx << ",\n";
@@ -493,9 +520,7 @@ void write_trt_outputs(const TrtState2D& state, const TrtOutputFiles2D& files) {
     summary << "  \"num_dirs\": " << p.num_dirs() << ",\n";
     summary << "  \"dt\": " << state.config.dt << ",\n";
     summary << "  \"num_time_steps\": " << state.config.num_time_steps << ",\n";
-    summary << "  \"scalar_flux_csv\": "" << files.scalar_flux_csv << "",\n";
-    summary << "  \"radiation_temperature_csv\": "" << files.radiation_temperature_csv << "",\n";
-    summary << "  \"material_temperature_csv\": "" << files.material_temperature_csv << "",\n";
+    summary << "  \"paraview_pvd\": \"" << writer.pvd_path() << "\",\n";
     summary << "  \"history\": [\n";
     for (std::size_t k = 0; k < state.history.size(); ++k) {
         const auto& rec = state.history[k];
@@ -505,11 +530,18 @@ void write_trt_outputs(const TrtState2D& state, const TrtOutputFiles2D& files) {
                 << ", \"max_temperature_change\": " << rec.max_temperature_change
                 << ", \"transport_iterations\": " << rec.transport_stats.iterations
                 << ", \"transport_final_error\": " << rec.transport_stats.final_error << "}";
-        if (k + 1 != state.history.size()) summary << ',';
+        if (k + 1 != state.history.size()) {
+            summary << ',';
+        }
         summary << '\n';
     }
     summary << "  ]\n";
     summary << "}\n";
+
+    std::cout << "Wrote:\n"
+              << "  " << writer.pvd_path() << '\n'
+              << "  " << outputs.summary_json << '\n';
+    return state.history;
 }
 
 } // namespace therefore2d

@@ -1,7 +1,6 @@
 #ifndef THEREFORE_TRT2D_HPP
 #define THEREFORE_TRT2D_HPP
 
-#include "output.hpp"
 #include "transport2d.hpp"
 
 #include <string>
@@ -35,12 +34,12 @@ struct TrtCellState2D {
 };
 
 struct TrtConfig2D {
-    int nx = 18;
-    int ny = 18;
-    int sn_order = 8;
+    int nx = 10;
+    int ny = 10;
+    int sn_order = 4;
     int num_time_steps = 40;
-    int max_nonlinear_iters = 10;
-    int max_transport_iters = 300;
+    int max_nonlinear_iters = 100;
+    int max_transport_iters = 3000;
     double dt = 1.0e-11;
     double transport_tol = 1.0e-10;
     double nonlinear_tol = 1.0e-6;
@@ -60,10 +59,10 @@ struct TrtTimestepStats2D {
 };
 
 struct TrtOutputFiles2D {
-    std::string scalar_flux_csv = "results/trt_scalar_flux_history.csv";
-    std::string radiation_temperature_csv = "results/trt_radiation_temperature_history.csv";
-    std::string material_temperature_csv = "results/trt_material_temperature_history.csv";
+    std::string output_dir = "results/trt";
+    std::string series_name = "trt";
     std::string summary_json = "results/trt_run_summary.json";
+    bool write_pvd_every_step = true;
 };
 
 struct TrtState2D {
@@ -80,12 +79,10 @@ std::vector<MaterialModelTRT> make_trt_materials();
 TrtState2D make_figure24a_lattice_problem(const TrtConfig2D& config = TrtConfig2D{});
 void initialize_trt_state(TrtState2D& state);
 TrtTimestepStats2D run_one_timestep_trt_cpu(TrtState2D& state, CpuLUCache& cache, bool use_openmp);
-void initialize_trt_output_files(const TrtOutputFiles2D& files);
-void append_trt_timestep_outputs(const TrtState2D& state,
-                                 const TrtOutputFiles2D& files,
-                                 int time_step,
-                                 double time);
-void write_trt_outputs(const TrtState2D& state, const TrtOutputFiles2D& files);
+std::vector<TrtTimestepStats2D> run_time_trt_cpu(TrtState2D& state,
+                                                 CpuLUCache& cache,
+                                                 bool use_openmp,
+                                                 const TrtOutputFiles2D& outputs = TrtOutputFiles2D{});
 
 } // namespace therefore2d
 

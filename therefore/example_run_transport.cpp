@@ -1,4 +1,3 @@
-#include "output.hpp"
 #include "transport2d.hpp"
 
 #include <cmath>
@@ -19,8 +18,6 @@ int main() {
 #else
     const bool use_rocm = false;
 #endif
-    const std::string backend_name = use_rocm ? "rocm" : (use_openmp ? "omp_lapack" : "cpu_lapack");
-
     Problem2D problem;
     problem.nx = 48;
     problem.ny = 32;
@@ -28,6 +25,8 @@ int main() {
     problem.Ly = 1.0;
     problem.groups = 2;
     problem.max_iters = 2500;
+    problem.num_time_steps = num_time_steps;
+    problem.time_step = 0.10;
     problem.convergence_tol = 1.0e-10;
     problem.initialize_from_previous = true;
     problem.reuse_factorization = true;
@@ -113,47 +112,20 @@ int main() {
 #ifdef THEREFORE2D_ENABLE_ROCM
     RocmLUCache rocm_cache;
 #endif
-    OutputFiles2D outputs;
-    initialize_output_files(outputs);
+    TransportOutputFiles2D outputs;
+    outputs.output_dir = "results/example_run_transport";
+    outputs.series_name = "transport";
+    outputs.summary_json = "results/example_run_transport_summary.json";
 
-    const double dt = cells.front().dt;
-    double time = 0.0;
-    std::vector<TimestepRecord2D> history;
-    history.reserve(num_time_steps);
-
-    for (int step = 0; step < num_time_steps; ++step) {
-        build_constant_rhs(state);
-        IterationStats stats{};
-#ifdef THEREFORE2D_ENABLE_ROCM
-        if (use_rocm) {
-            stats = run_one_timestep_rocm(state, rocm_cache);
-        } else
-#endif
-        {
-            stats = run_one_timestep_cpu(state, cpu_cache, use_openmp);
-        }
-        time += dt;
-        history.push_back(TimestepRecord2D{step, time, stats});
-
-        append_angular_flux_csv(outputs.angular_flux_csv, step, time, state.flux_previous);
-        append_scalar_flux_csv(outputs.scalar_flux_csv, step, time, state, state.flux_previous);
-
-        std::cout << "step " << step
-                  << "  time=" << time
-                  << "  iterations=" << stats.iterations
-                  << "  final_error=" << stats.final_error << '\n';
-    }
-
-    write_summary_json(outputs.summary_json, state, history, backend_name, outputs);
 #ifdef THEREFORE2D_ENABLE_ROCM
     if (use_rocm) {
+        run_time_rocm(state, rocm_cache, outputs);
         destroy_rocm_cache(rocm_cache);
-    }
+    } else
 #endif
+    {
+        run_time_cpu(state, cpu_cache, use_openmp, outputs);
+    }
 
-    std::cout << "\nWrote:\n"
-              << "  " << outputs.angular_flux_csv << '\n'
-              << "  " << outputs.scalar_flux_csv << '\n'
-              << "  " << outputs.summary_json << '\n';
     return 0;
 }
