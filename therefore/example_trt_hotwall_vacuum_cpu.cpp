@@ -10,8 +10,7 @@
 ///
 /// For a higher-quality run, increase kNx/kNy/kSN and tighten kNonlinearTol.
 
-#include "gmres.hpp"
-#include "gmres.hpp"
+#include "anderson.hpp"
 #include "output.hpp"
 #include "transport2d.hpp"
 #include "trt2d.hpp"

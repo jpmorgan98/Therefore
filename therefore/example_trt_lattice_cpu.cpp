@@ -1,12 +1,12 @@
 #include "trt2d.hpp"
 
 #include <filesystem>
-#if __has_include(<gperftools/profiler.h>)
-#include <gperftools/profiler.h>
-#else
-inline void ProfilerStart(const char*) {}
-inline void ProfilerStop() {}
-#endif
+//#if __has_include(<gperftools/profiler.h>)
+//#include <gperftools/profiler.h>
+//#else
+//inline void ProfilerStart(const char*) {}
+//inline void ProfilerStop() {}
+//#endif
 #include <iostream>
 #include <string>
 
@@ -173,8 +173,8 @@ int main(int argc, char** argv) {
     outputs.save_flux    = false;  // only write temperature fields
 
     CpuLUCache cache;
-    ProfilerStart("cpu.prof");
+    //ProfilerStart("cpu.prof");
     run_time_trt_cpu(state, cache, use_openmp, outputs);
-    ProfilerStop();
+    //ProfilerStop();
     return 0;
 }

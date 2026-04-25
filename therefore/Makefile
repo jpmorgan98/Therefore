@@ -14,7 +14,7 @@
 
 # ---- Toolchain --------------------------------------------------------------
 
-CXX      = g++-15
+CXX      = icpx
 HIPCC    ?= hipcc
 
 # ---- Compiler flags ---------------------------------------------------------
@@ -34,7 +34,7 @@ LAPACK_LIBS ?= -llapack -lblas
 # ---- Optional features ------------------------------------------------------
 
 ifeq ($(USE_OPENMP),1)
-    CXXFLAGS += -fopenmp
+    CXXFLAGS += -qopenmp
     OMP_DEFS  := -DTHEREFORE2D_EXAMPLE_USE_OPENMP
 else
     OMP_DEFS  :=
@@ -58,7 +58,7 @@ $(shell mkdir -p $(BUILDDIR) $(RESDIR))
 # ---- Core library object files (CPU) ----------------------------------------
 # These are shared by every example that does NOT use the ROCm back-end.
 
-CORE_SRCS := transport2d.cpp trt2d.cpp output.cpp gmres.cpp
+CORE_SRCS := transport2d.cpp trt2d.cpp output.cpp anderson.cpp
 CORE_OBJS := $(patsubst %.cpp,$(BUILDDIR)/%.o,$(CORE_SRCS))
 
 $(BUILDDIR)/%.o: %.cpp
