@@ -731,6 +731,7 @@ IterationStats run_one_timestep_cpu(SolverState2D& state,
     for (int it = 0; it < p.max_iters; ++it) {
         state.flux_current = state.rhs_const;
         add_upwind_inflow_rhs(state.flux_current, state.flux_last, state);
+        
         solve_cells_cpu(state, cache, state.flux_current, use_openmp);
 
         const double error = relative_l2_error(state.flux_last, state.flux_current);

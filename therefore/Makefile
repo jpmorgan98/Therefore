@@ -14,7 +14,7 @@
 
 # ---- Toolchain --------------------------------------------------------------
 
-CXX      = icpx
+CXX      = g++
 HIPCC    ?= hipcc
 
 # ---- Compiler flags ---------------------------------------------------------
@@ -98,7 +98,7 @@ ifeq ($(USE_ROCM),1)
 # output.cpp and trt2d.cpp are plain C++ but still need the ROCm defines so
 # that TrtState2D / TransportOutputFiles2D remain consistent.
 
-ROCM_CORE_SRCS := transport2d.cpp trt2d.cpp output.cpp gmres.cpp
+ROCM_CORE_SRCS := transport2d.cpp trt2d.cpp output.cpp anderson.cpp
 ROCM_CORE_OBJS := $(patsubst %.cpp,$(BUILDDIR)/rocm_%.o,$(ROCM_CORE_SRCS))
 
 $(BUILDDIR)/rocm_%.o: %.cpp
@@ -108,7 +108,8 @@ $(BUILDDIR)/transport2d_rocm.o: transport2d_rocm.cpp
 	$(HIPCC) $(HIPFLAGS) -c $< -o $@
 
 ROCM_EXAMPLES := \
-    example_infinite_medium_rocm
+    example_infinite_medium_rocm \
+    example_trt_hotwall_vacuum_rocm
 
 define BUILD_ROCM_EXAMPLE
 $(BUILDDIR)/$(1): $(BUILDDIR)/$(1)_rocm_main.o $(ROCM_CORE_OBJS) $(BUILDDIR)/transport2d_rocm.o

@@ -229,37 +229,69 @@ std::vector<Direction2D> make_level_symmetric_quadrature_2d(int sn_order);
 
 #ifdef THEREFORE2D_ENABLE_ROCM
 struct RocmLUCache {
-    int    n           = 0;
-    int    batch_count = 0;
-    std::size_t stride_a = 0;
-    std::size_t stride_b = 0;
-    std::size_t stride_p = 0;
-    void*  rocblas_handle   = nullptr;
-    double* d_lu            = nullptr;
-    double* d_rhs           = nullptr;
-    double* d_flux_last     = nullptr;
-    double* d_rhs_const     = nullptr;
-    double* d_work          = nullptr;
-    double* d_cell_dx       = nullptr;
-    double* d_cell_dy       = nullptr;
-    double* d_cell_dt       = nullptr;
-    double* d_cell_velocity = nullptr;
-    double* d_cell_source   = nullptr;
-    double* d_dir_mu        = nullptr;
-    double* d_dir_eta       = nullptr;
-    double* d_boundary_west = nullptr;
-    double* d_boundary_east = nullptr;
-    double* d_boundary_south= nullptr;
-    double* d_boundary_north= nullptr;
-    int*   d_pivots         = nullptr;
-    int*   d_info           = nullptr;
-    bool   sweep_data_valid = false;
-    bool   valid            = false;
+    // ---- problem dimensions (set by factor_cells_rocm) ----
+    int n            = 0;    // cell_block_size
+    int batch_count  = 0;    // total number of cells (ncells)
+    int chunk_size   = 0;    // cells processed per chunk (<= ncells)
+    std::size_t stride_a = 0;  // n * n  (elements per cell matrix)
+    std::size_t stride_b = 0;  // n      (elements per cell RHS)
+    std::size_t stride_p = 0;  // n      (pivot entries per cell)
+
+    // ---- rocBLAS handle ----
+    void* rocblas_handle = nullptr;
+
+    // ---- chunk-sized temporary LU workspace ----
+    // Replaces the old d_lu / d_pivots / d_info fields which held ncells
+    // matrices simultaneously (O(ncells x n^2) bytes).  These buffers hold
+    // at most chunk_size matrices at a time and are reused each iteration.
+    double* d_lu_chunk     = nullptr;   // [chunk_size * n * n]
+    int*    d_pivots_chunk = nullptr;   // [chunk_size * n]
+    int*    d_info_chunk   = nullptr;   // [chunk_size]
+
+    // ---- flux / RHS state (total_unknowns = ncells * n) ----
+    double* d_rhs       = nullptr;   // working RHS (rhs_const + upwind)
+    double* d_flux_last = nullptr;   // previous-iterate flux
+    double* d_rhs_const = nullptr;   // time-step constant RHS
+    double* d_work      = nullptr;   // scratch for convergence check
+
+    // ---- cell geometry (uploaded once, reused every timestep) ----
+    double* d_cell_dx       = nullptr;   // [ncells]
+    double* d_cell_dy       = nullptr;   // [ncells]
+    double* d_cell_dt       = nullptr;   // [ncells]
+    double* d_cell_velocity = nullptr;   // [ncells * groups]
+    double* d_cell_source   = nullptr;   // [total_unknowns]
+
+    // ---- cross-sections (re-uploaded each nonlinear TRT iteration) ----
+    double* d_cell_sigma_t  = nullptr;   // [ncells * groups]
+    double* d_cell_sigma_s  = nullptr;   // [ncells * groups * groups]
+
+    // ---- quadrature (direction cosines + weights) ----
+    double* d_dir_mu     = nullptr;   // [num_dirs]
+    double* d_dir_eta    = nullptr;   // [num_dirs]
+    double* d_dir_weight = nullptr;   // [num_dirs]
+
+    // ---- boundary conditions ----
+    double* d_boundary_west  = nullptr;
+    double* d_boundary_east  = nullptr;
+    double* d_boundary_south = nullptr;
+    double* d_boundary_north = nullptr;
+
+    // ---- state flags ----
+    bool sweep_data_valid = false;  // cell + cross-section data uploaded
+    bool valid            = false;  // buffers allocated, ready to iterate
 };
 
+// One-time GPU initialisation: allocates all device buffers, uploads
+// geometry, cross-sections, quadrature, and boundary conditions.
 void factor_cells_rocm(const SolverState2D& state, RocmLUCache& cache);
-void solve_cells_rocm (const SolverState2D& state, RocmLUCache& cache,
-                       std::vector<double>& rhs);
+
+// Lightweight per-nonlinear-iteration refresh for TRT outer loops.
+// Re-uploads only sigma_t, sigma_s, and source without reallocating.
+// Precondition: factor_cells_rocm() has been called at least once.
+void refresh_cell_opacities_rocm(const SolverState2D& state, RocmLUCache& cache);
+
+void solve_cells_rocm(const SolverState2D& state, RocmLUCache& cache,
+                      std::vector<double>& rhs);
 void destroy_rocm_cache(RocmLUCache& cache);
 
 IterationStats run_one_timestep_rocm(SolverState2D& state, RocmLUCache& cache);
